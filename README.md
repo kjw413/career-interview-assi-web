@@ -22,7 +22,11 @@ npm run dev
 5. 면접관 유형을 지정하고, 질문과 답변을 모두 작성한 뒤 준비 완료로 표시합니다. 검색·상태 필터·질문 목록으로 내용을 찾아볼 수 있습니다.
 6. 질문 삭제 시 연결된 하위 질문도 확인 후 함께 삭제됩니다. 마인드맵 노드를 드래그한 위치도 저장됩니다.
 
-## 저장과 백업
+## 클라우드에서 여러 기기 사용
+
+Vercel 배포와 Supabase 로그인·DB·비공개 PDF 저장을 지원합니다. 초기 설정과 기존 자료 이전 절차는 [클라우드 연결 안내](docs/CLOUD_SETUP.md)를 따르세요. 두 공개 환경변수를 설정하면 로그인 기반 클라우드 모드가 되고, 모두 없으면 기존 로컬 모드를 유지합니다.
+
+## 로컬 모드의 저장과 백업
 
 이력서 원본, 인식한 텍스트, 질문 트리는 **현재 브라우저의 IndexedDB**에 저장합니다. PDF 추출과 OCR은 브라우저 안에서 실행하며 이력서 내용을 외부로 전송하지 않습니다. 폰트와 OCR 모델도 앱에서 제공합니다. LLM API·서버·계정 없이 동작합니다.
 
@@ -35,7 +39,8 @@ OCR 정확도는 원본의 화질·배치·언어에 영향을 받습니다. 스
 ```bash
 npm test             # IndexedDB 저장, 트리 관계/삭제, 백업 검증
 npm run build        # TypeScript 검사 + 프로덕션 빌드
-npm run test:e2e     # 실제 브라우저 UI와 PDF 추출
+npm run test:e2e     # 로컬 모드의 실제 브라우저 UI와 PDF/OCR
+npm run test:e2e:cloud # 모의 Supabase 기반 로그인·클라우드 흐름
 npm run preview      # 빌드 결과 실행
 ```
 
@@ -47,7 +52,8 @@ E2E는 시스템 Chromium(`/usr/bin/chromium`)이 있으면 사용합니다. 다
 - React Flow: 질문 마인드맵과 확대·이동
 - PDF.js: 텍스트 추출·스캔 페이지 렌더링
 - Tesseract.js: 한국어·영어 OCR
-- IndexedDB: 지원 건과 PDF 저장
+- IndexedDB: 로컬 모드의 지원 건·PDF, 클라우드 미저장 복구 사본
+- Supabase: 계정 로그인·지원 건 DB·비공개 PDF 저장
 - Vitest · Playwright: 데이터 모델과 실제 사용 흐름 검증
 
 `src/App.tsx`는 지원 건과 작업 화면을, `src/components`는 마인드맵·질문 편집기를, `src/lib`는 OCR·저장·백업·트리 관계를 담당합니다.
