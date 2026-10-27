@@ -2,6 +2,8 @@
 
 이력서의 문구에서 예상 질문을 만들고, 답변의 키워드에서 꼬리질문을 연결하는 한국어 면접 준비 웹앱입니다. 기업·직무별 지원 건을 독립적으로 관리합니다.
 
+**사이트 바로가기:** [career-interview-assi-web.vercel.app](https://career-interview-assi-web.vercel.app/)
+
 ## 실행
 
 Node.js 22.13 이상이 필요합니다. 이 환경에서는 Node.js 24.19와 npm 11.9로 검증했습니다.
