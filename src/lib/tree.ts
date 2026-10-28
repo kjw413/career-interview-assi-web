@@ -96,7 +96,7 @@ export function layoutTree(nodes: InterviewNode[]): Record<string, { x: number; 
     let y: number;
     if (childRows.length === 0) {
       y = nextLeafY;
-      nextLeafY += 250;
+      nextLeafY += 350;
     } else {
       y = (childRows[0] + childRows[childRows.length - 1]) / 2;
     }

@@ -133,7 +133,7 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, fi
     return [root, ...project.nodes.map((node, index): QuestionFlowNode => ({
       id: node.id,
       type: 'question',
-      position: node.position || positions[node.id] || { x: 390, y: index * 256 },
+      position: node.position || positions[node.id] || { x: 390, y: index * 350 },
       selected: node.id === selectedId,
       data: {
         node, index, active: node.id === selectedId,
@@ -156,7 +156,7 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, fi
         // Start close enough to read. The fit control remains available for the full tree.
         void setViewport({
           x: 40 - root.x * zoom,
-          y: bounds.height / 2 - (root.y + 135) * zoom,
+          y: bounds.height / 2 - (root.y + 160) * zoom,
           zoom,
         });
       });
@@ -170,8 +170,8 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, fi
     if (!bounds || !node) return;
     const zoom = Math.max(0.65, getViewport().zoom);
     const position = node.position || positionsRef.current[selectedId];
-    const width = node.measured?.width || 280;
-    const height = node.measured?.height || 218;
+    const width = node.measured?.width || 320;
+    const height = node.measured?.height || 310;
     void setViewport({
       x: bounds.width / 2 - (position.x + width / 2) * zoom,
       y: bounds.height / 2 - (position.y + height / 2) * zoom,
