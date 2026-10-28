@@ -57,3 +57,19 @@
 @media(max-width:1100px){.editor-panel{width:340px;min-width:300px}.editor-header{padding:22px 20px 20px}.editor-body{padding:20px}.editor-footer{padding:14px 20px}}
 @media(max-width:760px){.editor-panel{position:absolute;right:0;top:0;bottom:0;width:min(370px,100%);min-width:0;z-index:15}.editor-header{padding-top:21px}.editor-body{padding:20px}}
 @media(prefers-reduced-motion:reduce){.editor-panel{animation:none}.editor-add-branch{transition:none}}
+
+/* Large, centered editor used by both views in expanded workspace mode. */
+.editor-panel.editor-panel-dialog{position:relative;inset:auto;width:100%;min-width:0;height:100%;border:0;box-shadow:none;animation:none}
+.editor-panel-dialog .editor-header{padding:22px 28px}
+.editor-panel-dialog .editor-header h2{font-size:23px}
+.editor-panel-dialog .editor-body{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.2fr);grid-template-rows:auto auto auto;gap:24px;padding:24px 28px;align-content:start}
+.editor-panel-dialog .editor-origin{grid-column:1;grid-row:1;margin:0}
+.editor-panel-dialog .editor-field:not(.editor-answer-field){grid-column:1;grid-row:2;display:flex;flex-direction:column;margin:0}
+.editor-panel-dialog .editor-question{flex:1;min-height:200px}
+.editor-panel-dialog .editor-answer-field{grid-column:2;grid-row:1 / span 2;display:flex;flex-direction:column;margin:0}
+.editor-panel-dialog .editor-answer{flex:1;min-height:300px}
+.editor-panel-dialog .editor-textarea{font-size:16px;line-height:1.9;padding:16px}
+.editor-panel-dialog .editor-completion{grid-column:1 / -1;margin:0}
+.editor-panel-dialog .editor-footer{padding:17px 28px}
+.editor-panel-dialog .editor-branch-hint,.editor-panel-dialog .editor-branch-placeholder,.editor-panel-dialog .editor-add-branch{flex-shrink:0}
+@media(max-width:760px){.editor-panel-dialog .editor-header{padding:19px 20px}.editor-panel-dialog .editor-body{display:block;padding:20px}.editor-panel-dialog .editor-origin,.editor-panel-dialog .editor-field{margin-bottom:22px}.editor-panel-dialog .editor-question{min-height:170px}.editor-panel-dialog .editor-answer{min-height:280px}.editor-panel-dialog .editor-footer{padding:15px 20px}}

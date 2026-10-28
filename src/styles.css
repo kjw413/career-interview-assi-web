@@ -32,3 +32,16 @@
 @media(max-width:600px){.main-shell{overflow-y:auto}.breadcrumbs{flex-basis:150px}.topbar{padding-top:10px;padding-bottom:10px}.topbar-right{gap:6px}.workspace-area{flex-shrink:0;min-height:360px}.workspace-toolbar{min-height:0}.toolbar-left{flex-shrink:0}.toolbar-right{flex-basis:100%}.toolbar-right select{max-width:112px}.view-tabs button{padding:7px 9px}.add-question{padding:8px 10px}.canvas-search{width:24px}.canvas-search:focus-within{height:44px}.overview-stat{min-width:44px}.overview-project{min-width:108px}.overview-project small{white-space:nowrap}.workspace-status{gap:4px}.workspace-status>span{flex-wrap:wrap}.question-list-item{align-items:flex-start}.list-item-meta{flex-wrap:wrap}.list-item-meta>span:last-child{overflow-wrap:anywhere}.guide-step p{line-height:1.8}}
 .resume-document p{font-size:14px}
 .workspace-label small{font-size:11px;letter-spacing:1px;white-space:nowrap}
+
+/* Expand only the working area; the sidebar and browser chrome stay available. */
+.workspace-expand-button{border-color:#dce5d3;background:#fff;color:#547149;padding:8px 10px;font-size:12px;gap:6px}
+.workspace-expand-button:hover,.workspace-expand-button[aria-pressed=true]{background:#edf4e6;border-color:#b9cfa7;color:#355d3d}
+.main-shell.workspace-expanded{overflow:hidden;min-height:0}
+.workspace-expanded>.topbar,.workspace-expanded>.page-heading,.workspace-expanded>.overview-strip,.workspace-expanded>.cloud-import-banner{display:none}
+.workspace-expanded>.workspace-area{margin:0;border:0;border-radius:0;min-height:0;flex:1}
+.workspace-expanded .workspace-toolbar{flex-shrink:0}
+.workspace-expanded .workspace-status{flex-shrink:0}
+.workspace-expanded .toolbar-right .save-state{font-size:12px}
+.modal.question-modal{width:min(1100px,calc(100vw - 48px));height:min(820px,calc(100dvh - 48px));max-height:calc(100dvh - 48px);padding:0;overflow:hidden;border-radius:16px}
+@media(max-width:1250px){.workspace-expanded .workspace-toolbar{flex-wrap:wrap;padding:10px;row-gap:8px}.workspace-expanded .toolbar-right{flex-wrap:wrap;justify-content:flex-end;margin-left:auto}}
+@media(max-width:600px){.workspace-expand-button{padding:7px 8px}.toolbar-left{flex-wrap:wrap}.workspace-expanded .toolbar-right .save-state{margin-right:auto}.workspace-expanded .workspace-area{flex-shrink:1}.modal.question-modal{width:calc(100vw - 24px);height:calc(100dvh - 24px);max-height:calc(100dvh - 24px);border-radius:12px}}

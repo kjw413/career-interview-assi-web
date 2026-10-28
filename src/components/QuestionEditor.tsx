@@ -4,6 +4,7 @@ import type { InterviewNode } from '../types';
 import './editor.css';
 
 interface QuestionEditorProps {
+  variant?: 'panel' | 'dialog';
   node: InterviewNode;
   parent: InterviewNode | null;
   onChange: (patch: Partial<InterviewNode>) => void;
@@ -12,7 +13,7 @@ interface QuestionEditorProps {
   onDelete: () => void;
 }
 
-export default function QuestionEditor({ node, parent, onChange, onClose, onAddChild, onDelete }: QuestionEditorProps) {
+export default function QuestionEditor({ node, parent, onChange, onClose, onAddChild, onDelete, variant = 'panel' }: QuestionEditorProps) {
   const [selection, setSelection] = useState('');
   const canComplete = Boolean(node.question.trim() && node.answer.trim());
 
@@ -29,7 +30,7 @@ export default function QuestionEditor({ node, parent, onChange, onClose, onAddC
   }
 
   return (
-    <aside className="editor-panel" aria-label="질문 편집">
+    <aside className={`editor-panel ${variant === 'dialog' ? 'editor-panel-dialog' : ''}`} aria-label="질문 편집">
       <header className="editor-header">
         <div>
           <span className="editor-eyebrow">QUESTION NOTE</span>
@@ -48,7 +49,7 @@ export default function QuestionEditor({ node, parent, onChange, onClose, onAddC
 
         <div className="editor-field">
           <label className="editor-field-label" htmlFor="editor-question"><span className="editor-label-icon"><MessageSquareText size={14} />예상 질문</span><span className="editor-field-number" aria-hidden="true">01</span></label>
-          <textarea id="editor-question" aria-label="예상 질문" className="editor-textarea editor-question" value={node.question} onChange={event => updateText('question', event.target.value)} placeholder="면접관이라면 어떤 질문을 할까요?" rows={3} />
+          <textarea id="editor-question" autoFocus={variant === 'dialog'} aria-label="예상 질문" className="editor-textarea editor-question" value={node.question} onChange={event => updateText('question', event.target.value)} placeholder="면접관이라면 어떤 질문을 할까요?" rows={3} />
         </div>
 
         <div className="editor-field editor-answer-field">
