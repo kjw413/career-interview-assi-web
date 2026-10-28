@@ -404,3 +404,75 @@ test('keeps the expanded popup open while navigating linked questions on desktop
   await expect(popup).toBeHidden();
   await expect(page.getByRole('button', { name: '작업 영역 전체화면 종료', exact: true })).toBeVisible();
 });
+
+test('drags whole question groups by their number while preserving every linked question and answer', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const before = JSON.parse(await downloadBackup(page)).project.nodes as Array<{ id: string }>;
+  await page.getByRole('button', { name: '작업 영역 전체화면', exact: true }).click();
+  await questionList(page);
+  const source = page.getByRole('button', { name: '질문 묶음 3 순서 변경', exact: true });
+  const target = page.getByRole('button', { name: '질문 묶음 2 순서 변경', exact: true });
+  await source.scrollIntoViewIfNeeded();
+  const sourceBounds = await source.boundingBox();
+  const targetBounds = await target.boundingBox();
+  expect(sourceBounds).not.toBeNull();
+  expect(targetBounds).not.toBeNull();
+  await page.mouse.move(sourceBounds!.x + sourceBounds!.width / 2, sourceBounds!.y + sourceBounds!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(sourceBounds!.x + sourceBounds!.width / 2, sourceBounds!.y + sourceBounds!.height / 2 - 10, { steps: 3 });
+  await page.mouse.move(targetBounds!.x + targetBounds!.width / 2, targetBounds!.y + targetBounds!.height / 2, { steps: 15 });
+  await page.mouse.up();
+  await expect.poll(() => page.locator('.question-list-group').evaluateAll((groups) => groups.map((group) => group.getAttribute('data-question-group'))))
+    .toEqual(['demo-q1', 'demo-q6', 'demo-q5']);
+  await expect(page.locator('.question-list-item .list-number')).toHaveText(['1-1', '1-2', '1-3', '1-4', '2-1', '3-1']);
+  await saved(page);
+  await page.getByRole('button', { name: '작업 영역 전체화면 종료', exact: true }).click();
+  const after = JSON.parse(await downloadBackup(page)).project.nodes as Array<{ id: string }>;
+  expect(after.map((node) => node.id)).toEqual(['demo-q1', 'demo-q2', 'demo-q3', 'demo-q4', 'demo-q6', 'demo-q5']);
+  expect([...after].sort((a, b) => a.id.localeCompare(b.id))).toEqual([...before].sort((a, b) => a.id.localeCompare(b.id)));
+  await expect(editor(page)).toHaveCount(0);
+});
+
+test('reorders a root and all descendants with the keyboard and persists the new group order', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('button', { name: '작업 영역 전체화면', exact: true }).click();
+  await questionList(page);
+  await page.getByRole('button', { name: '질문 묶음 1 순서 변경', exact: true }).focus();
+  await page.keyboard.press('Space');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Space');
+  const cardIds = () => page.locator('.question-list-item').evaluateAll((cards) => cards.map((card) => card.getAttribute('data-question-id')));
+  await expect.poll(cardIds).toEqual(['demo-q5', 'demo-q1', 'demo-q2', 'demo-q3', 'demo-q4', 'demo-q6']);
+  await expect(page.locator('.question-list-item .list-number')).toHaveText(['1-1', '2-1', '2-2', '2-3', '2-4', '3-1']);
+  await saved(page);
+  await page.reload();
+  await questionList(page);
+  await expect.poll(cardIds).toEqual(['demo-q5', 'demo-q1', 'demo-q2', 'demo-q3', 'demo-q4', 'demo-q6']);
+  await page.locator('[data-question-id="demo-q4"]').click();
+  await expect(editor(page).getByRole('button', { name: '부모 질문 2-3: 어떤 지표로 개선 효과를 검증했나요?', exact: true })).toBeVisible();
+});
+
+test('locks ordering inside connected flows, cancels a drag and disables reordering while filtered', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('button', { name: '작업 영역 전체화면', exact: true }).click();
+  await questionList(page);
+  await expect(page.getByRole('button', { name: /^질문 묶음 \d+ 순서 변경$/ })).toHaveCount(3);
+  for (const id of ['demo-q2', 'demo-q3', 'demo-q4']) {
+    await expect(page.locator(`[data-question-id="${id}"]`).getByRole('button', { name: /순서 변경/ })).toHaveCount(0);
+  }
+  await page.getByRole('button', { name: '질문 묶음 2 순서 변경', exact: true }).focus();
+  await page.keyboard.press('Space');
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: '작업 영역 전체화면 종료', exact: true })).toBeVisible();
+  await expect.poll(() => page.locator('.question-list-group').evaluateAll((groups) => groups.map((group) => group.getAttribute('data-question-group'))))
+    .toEqual(['demo-q1', 'demo-q5', 'demo-q6']);
+  await page.getByLabel('질문 검색', { exact: true }).fill('디자인 시스템');
+  await expect(page.getByRole('button', { name: '질문 묶음 2 순서 변경', exact: true })).toBeDisabled();
+  await expect(page.getByText('검색·상태 필터를 해제하면 순서를 바꿀 수 있어요.', { exact: true })).toBeVisible();
+  await page.getByLabel('질문 검색', { exact: true }).fill('');
+  await page.getByLabel('준비 상태 필터', { exact: true }).selectOption('ready');
+  await expect(page.getByRole('button', { name: '질문 묶음 1 순서 변경', exact: true })).toBeDisabled();
+  await page.getByLabel('준비 상태 필터', { exact: true }).selectOption('all');
+  await expect(page.getByRole('button', { name: '질문 묶음 1 순서 변경', exact: true })).toBeEnabled();
+});

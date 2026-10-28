@@ -80,6 +80,32 @@ export function getQuestionOutline(nodes: InterviewNode[]): QuestionOutlineEntry
   return outline;
 }
 
+/** Move complete root flows while keeping all connected questions in their existing order. */
+export function reorderQuestionBranch(nodes: InterviewNode[], sourceId: string, targetId: string, placement: 'before' | 'after'): InterviewNode[] {
+  const outline = getQuestionOutline(nodes);
+  const byId = new Map(outline.map((entry) => [entry.node.id, entry]));
+  const source = byId.get(sourceId);
+  const target = byId.get(targetId);
+  // A follow-up cannot be moved independently, nor can malformed duplicate IDs be dropped.
+  if (!source || !target || source.parentId !== null || outline.length !== nodes.length) return nodes;
+  const targetRootId = target.ancestorIds[0] ?? target.node.id;
+  if (targetRootId === sourceId) return nodes;
+
+  const groups: InterviewNode[][] = [];
+  for (const entry of outline) {
+    if (entry.parentId === null) groups.push([]);
+    groups[groups.length - 1].push(entry.node);
+  }
+  const sourceIndex = groups.findIndex((group) => group[0].id === sourceId);
+  const sourceGroup = groups.splice(sourceIndex, 1)[0];
+  const targetIndex = groups.findIndex((group) => group[0].id === targetRootId);
+  groups.splice(targetIndex + (placement === 'after' ? 1 : 0), 0, sourceGroup);
+  const reordered = groups.flat();
+  // No new save is needed when dropping in the flow's current relative position.
+  if (reordered.every((node, index) => node.id === outline[index].node.id)) return nodes;
+  return reordered;
+}
+
 /** Includes the starting node. Iterative traversal also tolerates malformed cycles. */
 export function getSubtreeIds(nodes: InterviewNode[], id: string): Set<string> {
   const children = new Map<string, string[]>();

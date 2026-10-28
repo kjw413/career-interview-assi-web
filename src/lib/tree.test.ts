@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { InterviewNode } from '../types';
-import { createNode, createProject, getQuestionOutline, getStats, getSubtreeIds, layoutTree } from './tree';
+import { createNode, createProject, getQuestionOutline, getStats, getSubtreeIds, layoutTree, reorderQuestionBranch } from './tree';
 
 function node(id: string, parentId: string | null = null): InterviewNode {
   return { ...createNode(parentId, `출발 구절 ${id}`), id };
@@ -54,6 +54,41 @@ describe('interview tree', () => {
       ['self', '3-1', null, []],
     ]);
     expect(getQuestionOutline([])).toEqual([]);
+  });
+
+  it('moves entire question flows using a descendant as the drop target without changing their contents', () => {
+    const nodes = [node('first'), node('second'), node('third'), node('left', 'first'), node('right', 'first'), node('deep', 'left'), node('second-child', 'second')];
+    nodes[0].question = '첫 질문';
+    nodes[3].answer = '작성한 답변';
+    nodes[3].status = 'ready';
+    nodes[3].position = { x: 40, y: 80 };
+    const snapshot = structuredClone(nodes);
+
+    const reordered = reorderQuestionBranch(nodes, 'second', 'deep', 'before');
+    expect(reordered.map((entry) => entry.id)).toEqual(['second', 'second-child', 'first', 'left', 'deep', 'right', 'third']);
+    expect(getQuestionOutline(reordered).map(({ node, label }) => [node.id, label])).toEqual([
+      ['second', '1-1'], ['second-child', '1-2'], ['first', '2-1'], ['left', '2-2'], ['deep', '2-3'], ['right', '2-4'], ['third', '3-1'],
+    ]);
+    expect(nodes).toEqual(snapshot);
+    for (const original of nodes) expect(reordered.find((entry) => entry.id === original.id)).toBe(original);
+  });
+
+  it('moves a parent together with all of its descendants after another complete flow', () => {
+    const nodes = [node('a'), node('b', 'a'), node('c', 'b'), node('d', 'a'), node('e'), node('f', 'e'), node('g')];
+    expect(reorderQuestionBranch(nodes, 'a', 'f', 'after').map((entry) => entry.id)).toEqual(['e', 'f', 'a', 'b', 'c', 'd', 'g']);
+    expect(reorderQuestionBranch(nodes, 'g', 'f', 'before').map((entry) => entry.id)).toEqual(['a', 'b', 'c', 'd', 'g', 'e', 'f']);
+  });
+
+  it('never reorders connected questions independently and preserves the original reference for no-op drops', () => {
+    const nodes = [node('a'), node('e'), node('b', 'a'), node('c', 'a'), node('d', 'b')];
+    expect(reorderQuestionBranch(nodes, 'b', 'c', 'after')).toBe(nodes);
+    expect(reorderQuestionBranch(nodes, 'b', 'e', 'before')).toBe(nodes);
+    expect(reorderQuestionBranch(nodes, 'a', 'd', 'after')).toBe(nodes);
+    expect(reorderQuestionBranch(nodes, 'a', 'a', 'before')).toBe(nodes);
+    expect(reorderQuestionBranch(nodes, 'a', 'e', 'before')).toBe(nodes);
+    expect(reorderQuestionBranch(nodes, 'missing', 'e', 'before')).toBe(nodes);
+    expect(reorderQuestionBranch(nodes, 'a', 'missing', 'after')).toBe(nodes);
+    expect(reorderQuestionBranch([], 'a', 'b', 'before')).toEqual([]);
   });
 
   it('terminates on malformed cycles and keeps cyclic components visible for recovery', () => {

@@ -6,7 +6,7 @@ import {
   PanelLeftOpen, Plus, Search, Settings2, Sparkles, Trash2, Upload, X, Maximize2, Minimize2,
 } from 'lucide-react';
 import type { InterviewNode, Project } from './types';
-import { createNode, createProject, getQuestionOutline, getStats, getSubtreeIds } from './lib/tree';
+import { createNode, createProject, getQuestionOutline, getStats, getSubtreeIds, reorderQuestionBranch } from './lib/tree';
 import { localStore, type ProjectStore } from './lib/projectStore';
 import { cloudConfig } from './lib/supabase';
 import { recoveryDrafts, clearDraft } from './lib/recovery';
@@ -328,6 +328,15 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
   const selectedEntry = selectedId ? outlineById.get(selectedId) : undefined;
   const selectedParent = selectedEntry?.parentId ? outlineById.get(selectedEntry.parentId) : undefined;
   const childQuestions = questionOutline.filter((entry) => entry.parentId === selectedId);
+  function reorderQuestions(sourceId: string, targetId: string, placement: 'before' | 'after') {
+    if (filter !== 'all' || search.trim()) return;
+    const current = projectsRef.current.find((project) => project.id === activeId);
+    if (!current) return;
+    const nodes = reorderQuestionBranch(current.nodes, sourceId, targetId, placement);
+    if (nodes === current.nodes) return;
+    updateProject(current.id, { nodes });
+    setToast('질문 묶음의 순서를 변경했습니다.');
+  }
   function navigateQuestion(id: string) {
     if (!outlineById.has(id)) return;
     setSelectedId(id); setSelection(null);
@@ -376,7 +385,7 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
             {resumeOpen && <aside className="resume-panel"><div className="resume-panel-heading"><div><FileText size={16} /><strong>나의 이력서</strong><span className="tiny-badge">{active.resume ? `${active.resume.pages}P` : 'PDF'}</span></div><button className="icon-button" aria-label="이력서 패널 닫기" onClick={() => setResumeOpen(false)}><X size={15} /></button></div>
             {upload?.projectId === active.id ? <div className="upload-progress"><div className="ocr-loader"><FileText size={32} /><span /></div><h3>경험을 읽고 있어요</h3><p>{upload.stage}</p><div className="progress-track"><span style={{ width: `${Math.round(upload.progress * 100)}%` }} /></div><span>{Math.round(upload.progress * 100)}%</span><button className="text-button" onClick={() => { uploadAbort.current?.abort(); setToast('이력서 읽기를 취소했습니다.'); }}>취소</button></div> : active.resume ? <><div className="resume-file"><span className="pdf-icon">PDF</span><span title={active.resume.name}>{active.resume.name}<small>{active.isDemo ? '가상의 예시 이력서' : active.resume.usedOcr ? 'OCR 인식 완료' : '텍스트 인식 완료'}</small></span><button className="icon-button" aria-label="이력서 교체" onClick={() => fileRef.current?.click()} disabled={!!upload}><Upload size={15} /></button></div><div className="resume-tip"><span className="tip-cursor">↖</span><p>궁금한 <strong>단어나 문장을 선택</strong>하면<br />새로운 질문을 연결할 수 있어요.</p></div><div className="resume-scroll" onScroll={() => setSelection(null)}>{resumeEditing ? <div className="resume-correction"><label htmlFor="resume-text-edit">인식한 텍스트 수정</label><textarea id="resume-text-edit" value={resumeDraft} onChange={(e) => setResumeDraft(e.target.value)} /><p>기존 질문의 연결 키워드는 유지됩니다.</p><div><button className="button button-outline" onClick={() => setResumeEditing(false)}>취소</button><button className="button button-primary" disabled={!resumeDraft.trim()} onClick={() => { updateProject(active.id, { resume: { ...active.resume!, text: resumeDraft } }); setResumeEditing(false); }}>수정 저장</button></div></div> : <SelectionText text={active.resume.text} nodes={active.nodes} onSelect={setSelection} />}</div><div className="resume-footer"><button className="text-button" onClick={() => { setResumeDraft(active.resume!.text); setResumeEditing(true); }}>텍스트 수정</button><button className="text-button" onClick={() => void openOriginal()}>원본 저장<ArrowDownToLine size={12} /></button></div></> : <div className="resume-upload" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); receivePdf(e.dataTransfer.files[0]); }}><div className="upload-icon"><Upload size={27} /></div><h3>이력서에서 시작하세요</h3><p>PDF를 끌어다 놓거나<br />아래 버튼으로 업로드해 주세요.</p><button className="button button-primary" onClick={() => fileRef.current?.click()} disabled={!!upload}><Plus size={15} />이력서 업로드</button><button className="text-button upload-manual" onClick={() => { setResumeDraft(''); setManualResumeOpen(true); }}>또는 텍스트로 직접 입력</button><small>PDF · 최대 20MB / 20페이지<br />한국어·영어 OCR 지원</small><div className="upload-privacy"><LockKeyhole size={13} />{isCloud ? 'PDF는 내 계정의 비공개 저장소에 보관돼요.' : '이력서는 이 브라우저 안에만 저장돼요.'}</div></div>}
             </aside>}
-            <div className="map-panel">{view === 'map' ? <InterviewMap project={active} selectedId={selectedId} onSelect={setSelectedId} onAdd={addQuestion} onPositionChange={(id, position) => updateProject(active.id, { nodes: active.nodes.map((n) => n.id === id ? { ...n, position } : n) })} filter={filter} search={search} /> : <QuestionList outline={questionOutline} selectedId={selectedId} filter={filter} search={search} onSelect={setSelectedId} />}</div>
+            <div className="map-panel">{view === 'map' ? <InterviewMap project={active} selectedId={selectedId} onSelect={setSelectedId} onAdd={addQuestion} onPositionChange={(id, position) => updateProject(active.id, { nodes: active.nodes.map((n) => n.id === id ? { ...n, position } : n) })} filter={filter} search={search} /> : <QuestionList outline={questionOutline} selectedId={selectedId} filter={filter} search={search} onSelect={setSelectedId} onReorder={reorderQuestions} />}</div>
             {questionEditor && (workspaceExpanded ? <Modal title="질문 크게 편집" className="question-modal" showClose={false} initialFocus=".editor-question" onClose={() => setSelectedId(null)}>{questionEditor}</Modal> : questionEditor)}
           </div>
           <div className="workspace-status"><span><span className="status-dot green" />나의 경험이 질문으로, 질문이 자신감으로.</span><span><LockKeyhole size={11} />{isCloud ? '내 계정에 클라우드 저장' : '브라우저에 로컬 저장'}</span></div>
