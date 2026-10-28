@@ -27,6 +27,8 @@
 .editor-textarea::placeholder{color:#a6afa3;font-size:14px;line-height:2}
 .editor-question{min-height:91px;font-weight:550}
 .editor-answer{min-height:181px;background:#fdfefb;font-weight:400}
+.editor-answer-count{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:4px 14px;margin-top:8px;color:#607365;font-size:14px;line-height:1.6;font-variant-numeric:tabular-nums;flex-shrink:0}
+.editor-answer-count strong{color:#344a3d;font-weight:650}
 .editor-branch-hint{display:flex;align-items:flex-start;gap:6px;font-size:12px;line-height:1.7;color:#8d9c85;margin-top:9px}
 .editor-branch-hint svg{flex-shrink:0;margin-top:1px;color:#89a176}
 .editor-add-branch{font:inherit;cursor:pointer;display:flex;align-items:center;gap:10px;padding:11px 12px;background:#ecf3e5;border:1px solid #cfdcbe;border-radius:9px;color:#446536;width:100%;text-align:left;margin-top:14px;transition:background .15s,transform .15s}

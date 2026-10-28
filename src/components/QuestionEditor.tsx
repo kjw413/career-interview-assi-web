@@ -16,6 +16,8 @@ interface QuestionEditorProps {
 export default function QuestionEditor({ node, parent, onChange, onClose, onAddChild, onDelete, variant = 'panel' }: QuestionEditorProps) {
   const [selection, setSelection] = useState('');
   const canComplete = Boolean(node.question.trim() && node.answer.trim());
+  const answerLength = Array.from(node.answer).length;
+  const answerLengthWithoutSpaces = Array.from(node.answer.replace(/\s/gu, '')).length;
 
   useEffect(() => { setSelection(''); }, [node.id]);
 
@@ -54,7 +56,11 @@ export default function QuestionEditor({ node, parent, onChange, onClose, onAddC
 
         <div className="editor-field editor-answer-field">
           <label className="editor-field-label" htmlFor="editor-answer"><span>나의 답변</span><span className="editor-field-number" aria-hidden="true">02</span></label>
-          <textarea id="editor-answer" aria-label="나의 답변" className="editor-textarea editor-answer" value={node.answer} onChange={event => updateText('answer', event.target.value)} onSelect={captureSelection} placeholder={'경험과 생각을 나만의 언어로 정리해 보세요.\n\n답변의 표현을 드래그하면 꼬리질문을 연결할 수 있어요.'} rows={8} />
+          <textarea id="editor-answer" aria-label="나의 답변" aria-describedby="editor-answer-count" className="editor-textarea editor-answer" value={node.answer} onChange={event => updateText('answer', event.target.value)} onSelect={captureSelection} placeholder={'경험과 생각을 나만의 언어로 정리해 보세요.\n\n답변의 표현을 드래그하면 꼬리질문을 연결할 수 있어요.'} rows={8} />
+          <div id="editor-answer-count" className="editor-answer-count">
+            <span>공백 포함 <strong>{answerLength.toLocaleString('ko-KR')}</strong>자</span>
+            <span>공백 제외 <strong>{answerLengthWithoutSpaces.toLocaleString('ko-KR')}</strong>자</span>
+          </div>
           <div className="editor-branch-hint"><GitBranch size={14} /><span>답변에서 문구를 드래그해 다음 질문을 연결하세요.</span></div>
 
           {selection ? <button className="editor-add-branch" onMouseDown={event => event.preventDefault()} onClick={() => { if (selection.trim()) onAddChild(selection.trim()); }} aria-label={`“${selection}”에서 꼬리질문 추가`}><span className="editor-add-branch-icon"><GitBranch size={17} /></span><span className="editor-add-branch-copy"><span className="editor-selected-quote">“{selection}”</span><strong>이 표현에서 꼬리질문 추가</strong></span><span className="editor-add-branch-plus">+</span></button> : <div className="editor-branch-placeholder"><span className="editor-branch-placeholder-line" /><GitBranch size={17} /><span>좋은 질문은 답변에서 이어져요</span></div>}
