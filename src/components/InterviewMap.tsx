@@ -6,7 +6,7 @@ import {
 } from '@xyflow/react';
 import { ArrowUpRight, Check, FileText, Focus, GitBranch, Minus, Plus, Quote, ScanLine } from 'lucide-react';
 import type { Project, InterviewNode } from '../types';
-import { layoutTree } from '../lib/tree';
+import { getQuestionOutline, layoutTree } from '../lib/tree';
 import './map.css';
 
 interface InterviewMapProps {
@@ -21,7 +21,7 @@ interface InterviewMapProps {
 
 type QuestionData = {
   node: InterviewNode;
-  index: number;
+  label: string;
   childCount: number;
   active: boolean;
   dimmed: boolean;
@@ -38,7 +38,7 @@ type ResumeFlowNode = Node<ResumeData, 'resume'>;
 type MapNode = QuestionFlowNode | ResumeFlowNode;
 
 function QuestionCard({ data }: NodeProps<QuestionFlowNode>) {
-  const { node, index, childCount, active, dimmed, onSelect, onAdd } = data;
+  const { node, label, childCount, active, dimmed, onSelect, onAdd } = data;
   const [selection, setSelection] = useState('');
   const readSelection = useCallback((element: HTMLParagraphElement) => {
     const selected = window.getSelection();
@@ -51,13 +51,13 @@ function QuestionCard({ data }: NodeProps<QuestionFlowNode>) {
       className={`map-question-card${active ? ' is-active' : ''}${dimmed ? ' is-dimmed' : ''}${node.status === 'draft' ? ' is-draft' : ''}`}
       tabIndex={0}
       role="group"
-      aria-label={`질문 ${index + 1}: ${node.question || '새 질문'}`}
+      aria-label={`질문 ${label}: ${node.question || '새 질문'}`}
       onClick={() => { if (!window.getSelection()?.toString()) onSelect(node.id); }}
       onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onSelect(node.id); } }}
     >
       <Handle type="target" position={Position.Left} className="map-handle" />
       <div className="map-card-top">
-        <span className="map-question-number">Q{String(index + 1).padStart(2, '0')}</span>
+        <span className="map-question-number">{label}</span>
         <span className={`map-status ${node.status}`} title={node.status === 'ready' ? '준비 완료' : '작성 중'}>{node.status === 'ready' ? <Check size={11} /> : <span />}{node.status === 'ready' ? '준비 완료' : '작성 중'}</span>
       </div>
       <div className="map-anchor" title={node.anchor}><Quote size={11} /><span>{node.anchor || '연결할 표현을 선택해 주세요'}</span></div>
@@ -121,6 +121,7 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, fi
   const [initialized, setInitialized] = useState(false);
   const { getNode, getViewport, setViewport } = useReactFlow<MapNode>();
   const positions = useMemo(() => layoutTree(project.nodes), [project.nodes]);
+  const labels = useMemo(() => new Map(getQuestionOutline(project.nodes).map((entry) => [entry.node.id, entry.label])), [project.nodes]);
   const positionsRef = useRef(positions);
   positionsRef.current = positions;
   const initialNodes = useMemo<MapNode[]>(() => {
@@ -135,13 +136,13 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, fi
       position: node.position || positions[node.id] || { x: 390, y: index * 350 },
       selected: node.id === selectedId,
       data: {
-        node, index, active: node.id === selectedId,
+        node, label: labels.get(node.id)!, active: node.id === selectedId,
         childCount: project.nodes.filter((candidate) => candidate.parentId === node.id).length,
         dimmed: (filter !== 'all' && node.status !== filter) || (!!query && !`${node.question} ${node.answer} ${node.anchor}`.toLocaleLowerCase().includes(query)),
         onSelect, onAdd,
       },
     }))];
-  }, [project, positions, selectedId, onSelect, onAdd, filter, search]);
+  }, [project, positions, labels, selectedId, onSelect, onAdd, filter, search]);
   const [nodes, setNodes, onNodesChange] = useNodesState<MapNode>(initialNodes);
   useEffect(() => { setNodes(initialNodes); }, [initialNodes, setNodes]);
   useEffect(() => {

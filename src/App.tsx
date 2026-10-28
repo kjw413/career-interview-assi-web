@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   ArrowDownToLine, ArrowRight, ArrowUpRight, BookOpen, Check, CheckCheck,
   CheckCircle2, ChevronDown, ChevronRight, CircleHelp, FileText, FolderOpen, GitBranch,
@@ -6,7 +6,7 @@ import {
   PanelLeftOpen, Plus, Search, Settings2, Sparkles, Trash2, Upload, X, Maximize2, Minimize2,
 } from 'lucide-react';
 import type { InterviewNode, Project } from './types';
-import { createNode, createProject, getStats, getSubtreeIds } from './lib/tree';
+import { createNode, createProject, getQuestionOutline, getStats, getSubtreeIds } from './lib/tree';
 import { localStore, type ProjectStore } from './lib/projectStore';
 import { cloudConfig } from './lib/supabase';
 import { recoveryDrafts, clearDraft } from './lib/recovery';
@@ -14,6 +14,7 @@ import CloudAccount, { CloudSetupError } from './components/CloudAccount';
 import { parseProjectBackup, serializeProject } from './lib/backup';
 import InterviewMap from './components/InterviewMap';
 import QuestionEditor from './components/QuestionEditor';
+import QuestionList from './components/QuestionList';
 
 const EMPTY_PROJECTS: Project[] = [];
 type Confirm = { title: string; description: string; action: () => void; label?: string };
@@ -322,7 +323,23 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
     try { const blob = await getResumeFile(active.id); if (blob) download(active.resume?.name ?? '이력서.pdf', blob); else setToast('샘플 또는 백업으로 불러온 이력서는 PDF 원본이 없습니다.'); }
     catch { setToast('PDF 원본을 불러오지 못했습니다.'); }
   }
-  const filteredNodes = active?.nodes.filter((n) => (filter === 'all' || n.status === filter) && (!search || `${n.anchor} ${n.question} ${n.answer}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()))) ?? [];
+  const questionOutline = useMemo(() => getQuestionOutline(active?.nodes ?? []), [active?.nodes]);
+  const outlineById = new Map(questionOutline.map((entry) => [entry.node.id, entry]));
+  const selectedEntry = selectedId ? outlineById.get(selectedId) : undefined;
+  const selectedParent = selectedEntry?.parentId ? outlineById.get(selectedEntry.parentId) : undefined;
+  const childQuestions = questionOutline.filter((entry) => entry.parentId === selectedId);
+  function navigateQuestion(id: string) {
+    if (!outlineById.has(id)) return;
+    setSelectedId(id); setSelection(null);
+    // Keep the destination visible even when the previous question's filter excludes it.
+    setFilter('all'); setSearch('');
+    requestAnimationFrame(() => document.getElementById('editor-question')?.focus());
+  }
+  const questionEditor = selected && selectedEntry && <QuestionEditor key={selected.id}
+    variant={workspaceExpanded ? 'dialog' : 'panel'} node={selected} parent={selectedParent?.node ?? null}
+    questionLabel={selectedEntry.label} parentLabel={selectedParent?.label} childQuestions={childQuestions}
+    onNavigate={navigateQuestion} onChange={updateNode} onClose={() => setSelectedId(null)}
+    onAddChild={(anchor) => addQuestion(selected.id, anchor)} onDelete={deleteBranch} />;
 
   const saveIndicator = <button className={`save-state ${saveStatus === 'error' ? 'save-error' : ''}`} disabled={saveStatus !== 'error'} onClick={() => { for (const id of saveErrors.current) { const project = projectsRef.current.find((item) => item.id === id); if (project) persist(project); } }} aria-label={saveStatus === 'error' ? '저장 실패, 다시 시도' : saveStatus === 'saving' ? '저장 중' : '모든 변경사항 저장됨'}>{saveStatus === 'saving' ? <LoaderCircle size={13} className="spin" /> : saveStatus === 'error' ? <CircleHelp size={13} /> : <CheckCheck size={14} />}{saveStatus === 'saving' ? '저장 중' : saveStatus === 'error' ? '저장 실패 · 다시 시도' : '모든 변경사항 저장됨'}</button>;
 
@@ -359,8 +376,8 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
             {resumeOpen && <aside className="resume-panel"><div className="resume-panel-heading"><div><FileText size={16} /><strong>나의 이력서</strong><span className="tiny-badge">{active.resume ? `${active.resume.pages}P` : 'PDF'}</span></div><button className="icon-button" aria-label="이력서 패널 닫기" onClick={() => setResumeOpen(false)}><X size={15} /></button></div>
             {upload?.projectId === active.id ? <div className="upload-progress"><div className="ocr-loader"><FileText size={32} /><span /></div><h3>경험을 읽고 있어요</h3><p>{upload.stage}</p><div className="progress-track"><span style={{ width: `${Math.round(upload.progress * 100)}%` }} /></div><span>{Math.round(upload.progress * 100)}%</span><button className="text-button" onClick={() => { uploadAbort.current?.abort(); setToast('이력서 읽기를 취소했습니다.'); }}>취소</button></div> : active.resume ? <><div className="resume-file"><span className="pdf-icon">PDF</span><span title={active.resume.name}>{active.resume.name}<small>{active.isDemo ? '가상의 예시 이력서' : active.resume.usedOcr ? 'OCR 인식 완료' : '텍스트 인식 완료'}</small></span><button className="icon-button" aria-label="이력서 교체" onClick={() => fileRef.current?.click()} disabled={!!upload}><Upload size={15} /></button></div><div className="resume-tip"><span className="tip-cursor">↖</span><p>궁금한 <strong>단어나 문장을 선택</strong>하면<br />새로운 질문을 연결할 수 있어요.</p></div><div className="resume-scroll" onScroll={() => setSelection(null)}>{resumeEditing ? <div className="resume-correction"><label htmlFor="resume-text-edit">인식한 텍스트 수정</label><textarea id="resume-text-edit" value={resumeDraft} onChange={(e) => setResumeDraft(e.target.value)} /><p>기존 질문의 연결 키워드는 유지됩니다.</p><div><button className="button button-outline" onClick={() => setResumeEditing(false)}>취소</button><button className="button button-primary" disabled={!resumeDraft.trim()} onClick={() => { updateProject(active.id, { resume: { ...active.resume!, text: resumeDraft } }); setResumeEditing(false); }}>수정 저장</button></div></div> : <SelectionText text={active.resume.text} nodes={active.nodes} onSelect={setSelection} />}</div><div className="resume-footer"><button className="text-button" onClick={() => { setResumeDraft(active.resume!.text); setResumeEditing(true); }}>텍스트 수정</button><button className="text-button" onClick={() => void openOriginal()}>원본 저장<ArrowDownToLine size={12} /></button></div></> : <div className="resume-upload" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); receivePdf(e.dataTransfer.files[0]); }}><div className="upload-icon"><Upload size={27} /></div><h3>이력서에서 시작하세요</h3><p>PDF를 끌어다 놓거나<br />아래 버튼으로 업로드해 주세요.</p><button className="button button-primary" onClick={() => fileRef.current?.click()} disabled={!!upload}><Plus size={15} />이력서 업로드</button><button className="text-button upload-manual" onClick={() => { setResumeDraft(''); setManualResumeOpen(true); }}>또는 텍스트로 직접 입력</button><small>PDF · 최대 20MB / 20페이지<br />한국어·영어 OCR 지원</small><div className="upload-privacy"><LockKeyhole size={13} />{isCloud ? 'PDF는 내 계정의 비공개 저장소에 보관돼요.' : '이력서는 이 브라우저 안에만 저장돼요.'}</div></div>}
             </aside>}
-            <div className="map-panel">{view === 'map' ? <InterviewMap project={active} selectedId={selectedId} onSelect={setSelectedId} onAdd={addQuestion} onPositionChange={(id, position) => updateProject(active.id, { nodes: active.nodes.map((n) => n.id === id ? { ...n, position } : n) })} filter={filter} search={search} /> : <div className="question-list"><div className="list-heading"><div><p className="eyebrow">YOUR QUESTION LIBRARY</p><h2>차곡차곡 쌓인 질문들 <span>{filteredNodes.length}</span></h2></div><span>질문을 눌러 답변을 다듬어 보세요.</span></div>{filteredNodes.length ? filteredNodes.map((node, index) => <button key={node.id} className={`question-list-item ${selectedId === node.id ? 'selected' : ''}`} onClick={() => setSelectedId(node.id)}><span className="list-number">{(index + 1).toString().padStart(2, '0')}</span><div><div className="list-item-meta"><span>{node.parentId ? <GitBranch size={12} /> : <FileText size={12} />}{node.anchor || '연결 키워드 없음'}</span></div><strong>{node.question || '새로운 질문을 작성해 주세요'}</strong><p>{node.answer || '아직 답변을 작성하지 않았어요.'}</p></div><span className={`list-status ${node.status}`}><span />{node.status === 'ready' ? '준비 완료' : '작성 중'}</span><ChevronRight size={17} /></button>) : <div className="list-empty"><Search size={28} /><h3>{search || filter !== 'all' ? '일치하는 질문이 없어요' : '첫 질문을 연결해 보세요'}</h3><p>{search || filter !== 'all' ? '검색어나 상태 필터를 변경해 주세요.' : '이력서의 문구를 선택하면 나만의 질문이 시작돼요.'}</p></div>}</div>}</div>
-            {selected && (workspaceExpanded ? <Modal title="질문 크게 편집" className="question-modal" showClose={false} initialFocus=".editor-question" onClose={() => setSelectedId(null)}><QuestionEditor key={selected.id} variant="dialog" node={selected} parent={active.nodes.find((n) => n.id === selected.parentId) ?? null} onChange={updateNode} onClose={() => setSelectedId(null)} onAddChild={(anchor) => addQuestion(selected.id, anchor)} onDelete={deleteBranch} /></Modal> : <QuestionEditor key={selected.id} node={selected} parent={active.nodes.find((n) => n.id === selected.parentId) ?? null} onChange={updateNode} onClose={() => setSelectedId(null)} onAddChild={(anchor) => addQuestion(selected.id, anchor)} onDelete={deleteBranch} />)}
+            <div className="map-panel">{view === 'map' ? <InterviewMap project={active} selectedId={selectedId} onSelect={setSelectedId} onAdd={addQuestion} onPositionChange={(id, position) => updateProject(active.id, { nodes: active.nodes.map((n) => n.id === id ? { ...n, position } : n) })} filter={filter} search={search} /> : <QuestionList outline={questionOutline} selectedId={selectedId} filter={filter} search={search} onSelect={setSelectedId} />}</div>
+            {questionEditor && (workspaceExpanded ? <Modal title="질문 크게 편집" className="question-modal" showClose={false} initialFocus=".editor-question" onClose={() => setSelectedId(null)}>{questionEditor}</Modal> : questionEditor)}
           </div>
           <div className="workspace-status"><span><span className="status-dot green" />나의 경험이 질문으로, 질문이 자신감으로.</span><span><LockKeyhole size={11} />{isCloud ? '내 계정에 클라우드 저장' : '브라우저에 로컬 저장'}</span></div>
         </section>

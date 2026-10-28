@@ -28,6 +28,58 @@ export function createNode(parentId: string | null, anchor: string): InterviewNo
   };
 }
 
+export interface QuestionOutlineEntry {
+  node: InterviewNode;
+  label: string;
+  depth: number;
+  parentId: string | null;
+  ancestorIds: string[];
+}
+
+/** Number each root's complete flow before applying search or status filters. */
+export function getQuestionOutline(nodes: InterviewNode[]): QuestionOutlineEntry[] {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const children = new Map<string, InterviewNode[]>();
+  const roots: InterviewNode[] = [];
+  for (const node of nodes) {
+    if (node.parentId === null || !byId.has(node.parentId)) {
+      roots.push(node);
+    } else {
+      const siblings = children.get(node.parentId) ?? [];
+      siblings.push(node);
+      children.set(node.parentId, siblings);
+    }
+  }
+
+  const outline: QuestionOutlineEntry[] = [];
+  const visited = new Set<string>();
+  let group = 0;
+  const visitGroup = (root: InterviewNode) => {
+    if (visited.has(root.id)) return;
+    group += 1;
+    let step = 0;
+    const pending: { node: InterviewNode; parentId: string | null; ancestorIds: string[] }[] = [
+      { node: root, parentId: null, ancestorIds: [] },
+    ];
+    while (pending.length) {
+      const current = pending.pop()!;
+      if (visited.has(current.node.id)) continue;
+      visited.add(current.node.id);
+      step += 1;
+      outline.push({ ...current, label: `${group}-${step}`, depth: current.ancestorIds.length });
+      const descendants = children.get(current.node.id) ?? [];
+      for (let index = descendants.length - 1; index >= 0; index -= 1) {
+        pending.push({ node: descendants[index], parentId: current.node.id, ancestorIds: [...current.ancestorIds, current.node.id] });
+      }
+    }
+  };
+
+  roots.forEach(visitGroup);
+  // Keep rootless cycles visible, breaking only their first entry's parent link.
+  nodes.forEach(visitGroup);
+  return outline;
+}
+
 /** Includes the starting node. Iterative traversal also tolerates malformed cycles. */
 export function getSubtreeIds(nodes: InterviewNode[], id: string): Set<string> {
   const children = new Map<string, string[]>();

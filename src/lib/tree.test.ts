@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { InterviewNode } from '../types';
-import { createNode, createProject, getStats, getSubtreeIds, layoutTree } from './tree';
+import { createNode, createProject, getQuestionOutline, getStats, getSubtreeIds, layoutTree } from './tree';
 
 function node(id: string, parentId: string | null = null): InterviewNode {
   return { ...createNode(parentId, `출발 구절 ${id}`), id };
@@ -22,6 +22,38 @@ describe('interview tree', () => {
     const removed = getSubtreeIds(nodes, 'b');
     expect([...removed].sort()).toEqual(['b', 'c']);
     expect(nodes.filter((entry) => !removed.has(entry.id)).map((entry) => entry.id)).toEqual(['a', 'd', 'e']);
+  });
+
+  it('groups late-created follow-ups with their root and preserves real branching ancestry', () => {
+    const nodes = [node('first'), node('second'), node('left', 'first'), node('right', 'first'), node('deep', 'left')];
+    expect(getQuestionOutline(nodes).map(({ node, label, depth, parentId, ancestorIds }) => ({ id: node.id, label, depth, parentId, ancestorIds }))).toEqual([
+      { id: 'first', label: '1-1', depth: 0, parentId: null, ancestorIds: [] },
+      { id: 'left', label: '1-2', depth: 1, parentId: 'first', ancestorIds: ['first'] },
+      { id: 'deep', label: '1-3', depth: 2, parentId: 'left', ancestorIds: ['first', 'left'] },
+      { id: 'right', label: '1-4', depth: 1, parentId: 'first', ancestorIds: ['first'] },
+      { id: 'second', label: '2-1', depth: 0, parentId: null, ancestorIds: [] },
+    ]);
+  });
+
+  it('numbers out-of-order descendants before filtering without renumbering matches', () => {
+    const nodes = [node('deep', 'child'), node('root'), node('child', 'root'), node('other')];
+    const outline = getQuestionOutline(nodes);
+    expect(outline.map(({ node, label }) => [node.id, label])).toEqual([
+      ['root', '1-1'], ['child', '1-2'], ['deep', '1-3'], ['other', '2-1'],
+    ]);
+    expect(outline.filter(({ node }) => node.id === 'deep' || node.id === 'other').map(({ label }) => label)).toEqual(['1-3', '2-1']);
+  });
+
+  it('keeps orphaned and cyclic outline entries visible once with finite ancestry', () => {
+    const nodes = [node('cycle-a', 'cycle-b'), node('orphan', 'missing'), node('cycle-b', 'cycle-a'), node('self', 'self')];
+    const outline = getQuestionOutline(nodes);
+    expect(outline.map(({ node, label, parentId, ancestorIds }) => [node.id, label, parentId, ancestorIds])).toEqual([
+      ['orphan', '1-1', null, []],
+      ['cycle-a', '2-1', null, []],
+      ['cycle-b', '2-2', 'cycle-a', ['cycle-a']],
+      ['self', '3-1', null, []],
+    ]);
+    expect(getQuestionOutline([])).toEqual([]);
   });
 
   it('terminates on malformed cycles and keeps cyclic components visible for recovery', () => {

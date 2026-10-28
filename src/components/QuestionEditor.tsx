@@ -1,5 +1,5 @@
 import { useEffect, useState, type SyntheticEvent } from 'react';
-import { Check, CheckCheck, ChevronRight, GitBranch, Link2, MessageSquareText, Quote, Trash2, X } from 'lucide-react';
+import { ArrowUp, Check, CheckCheck, ChevronRight, CornerDownRight, GitBranch, Link2, MessageSquareText, Quote, Trash2, X } from 'lucide-react';
 import type { InterviewNode } from '../types';
 import './editor.css';
 
@@ -7,13 +7,17 @@ interface QuestionEditorProps {
   variant?: 'panel' | 'dialog';
   node: InterviewNode;
   parent: InterviewNode | null;
+  questionLabel: string;
+  parentLabel?: string;
+  childQuestions: Array<{ node: InterviewNode; label: string }>;
+  onNavigate: (id: string) => void;
   onChange: (patch: Partial<InterviewNode>) => void;
   onClose: () => void;
   onAddChild: (anchor: string) => void;
   onDelete: () => void;
 }
 
-export default function QuestionEditor({ node, parent, onChange, onClose, onAddChild, onDelete, variant = 'panel' }: QuestionEditorProps) {
+export default function QuestionEditor({ node, parent, questionLabel, parentLabel, childQuestions, onNavigate, onChange, onClose, onAddChild, onDelete, variant = 'panel' }: QuestionEditorProps) {
   const [selection, setSelection] = useState('');
   const canComplete = Boolean(node.question.trim() && node.answer.trim());
   const answerLength = Array.from(node.answer).length;
@@ -36,10 +40,24 @@ export default function QuestionEditor({ node, parent, onChange, onClose, onAddC
       <header className="editor-header">
         <div>
           <span className="editor-eyebrow">QUESTION NOTE</span>
-          <h2>질문 다듬기<span className="editor-title-dot" /></h2>
+          <div className="editor-title-row"><h2>질문 다듬기<span className="editor-title-dot" /></h2><span className="editor-question-label" aria-label={`현재 질문 ${questionLabel}`}>{questionLabel}</span></div>
         </div>
         <button className="editor-close" onClick={onClose} aria-label="질문 편집 닫기" title="닫기"><X size={19} /></button>
       </header>
+
+      {(parent || childQuestions.length > 0) && <nav className="editor-question-nav" aria-label="연결된 질문">
+        <h3>연결된 질문</h3>
+        <div className="editor-question-nav-links">
+          {parent && <button type="button" className="editor-question-nav-button" aria-label={`부모 질문${parentLabel ? ` ${parentLabel}` : ''}: ${parent.question || '아직 작성하지 않은 질문'}`} title={parent.question || '아직 작성하지 않은 질문'} onClick={() => onNavigate(parent.id)}>
+            <ArrowUp size={17} />
+            <span className="editor-question-nav-copy"><span className="editor-question-nav-meta"><span>부모 질문</span>{parentLabel && <strong>{parentLabel}</strong>}</span><span className="editor-question-nav-title">{parent.question || '아직 작성하지 않은 질문'}</span></span>
+          </button>}
+          {childQuestions.map(({ node: child, label }) => <button type="button" key={child.id} className="editor-question-nav-button" aria-label={`꼬리질문 ${label}: ${child.question || '아직 작성하지 않은 질문'}`} title={child.question || '아직 작성하지 않은 질문'} onClick={() => onNavigate(child.id)}>
+            <CornerDownRight size={17} />
+            <span className="editor-question-nav-copy"><span className="editor-question-nav-meta"><span>꼬리질문</span><strong>{label}</strong></span><span className="editor-question-nav-title">{child.question || '아직 작성하지 않은 질문'}</span></span>
+          </button>)}
+        </div>
+      </nav>}
 
       <div className="editor-body">
         <div className="editor-origin">

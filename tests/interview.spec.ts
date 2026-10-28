@@ -322,3 +322,85 @@ test('keeps expanded workspace and popup usable on a small mobile screen', async
   expect(await page.evaluate(() => document.body.scrollWidth)).toBeLessThanOrEqual(390);
   await page.getByRole('button', { name: '작업 영역 전체화면 종료', exact: true }).click();
 });
+
+test('groups connected questions with stable numbers through filters and places later follow-ups under their parent', async ({ page }) => {
+  await questionList(page);
+  const numbers = page.locator('.question-list-item .list-number');
+  await expect(numbers).toHaveText(['1-1', '1-2', '1-3', '1-4', '2-1', '3-1']);
+  await expect(page.locator('.question-list-item').filter({ hasText: '테스트 결과에 영향을 줄 수 있는 변수' }).locator('.list-question-path')).toHaveAttribute('aria-label', '연결 흐름 1-3 → 1-4');
+  await page.getByLabel('준비 상태 필터', { exact: true }).selectOption('draft');
+  await expect(numbers).toHaveText(['1-4', '3-1']);
+  await page.getByLabel('질문 검색', { exact: true }).fill('테스트 결과');
+  await expect(numbers).toHaveText(['1-4']);
+  await page.getByLabel('준비 상태 필터', { exact: true }).selectOption('all');
+  await page.getByLabel('질문 검색', { exact: true }).fill('');
+
+  await openQuestion(page, '사용자 인터뷰는 어떤 방식으로 진행했나요?');
+  await selectAnswerText(page, '8명');
+  await fillQuestion(page, '인터뷰 인원은 어떻게 결정했나요?', '실제로 가입을 중단한 사용자를 모집했습니다.');
+  await closeEditor(page);
+  await expect(numbers).toHaveText(['1-1', '1-2', '1-3', '1-4', '1-5', '2-1', '3-1']);
+  const cards = page.locator('.question-list-item');
+  await expect(cards.nth(2)).toContainText('인터뷰 인원은 어떻게 결정했나요?');
+  await expect(cards.nth(2).locator('.list-question-path')).toHaveAttribute('aria-label', '연결 흐름 1-2 → 1-3');
+  await expect(cards.nth(3)).toContainText('어떤 지표로 개선 효과를 검증했나요?');
+});
+
+test('navigates parent and sibling branches from filtered questions and preserves edits made immediately before moving', async ({ page }) => {
+  await questionList(page);
+  await page.getByLabel('준비 상태 필터', { exact: true }).selectOption('draft');
+  await page.getByLabel('질문 검색', { exact: true }).fill('테스트 결과');
+  await page.locator('.question-list-item').click();
+  const navigation = () => editor(page).getByRole('navigation', { name: '연결된 질문', exact: true });
+  await navigation().getByRole('button', { name: '부모 질문 1-3: 어떤 지표로 개선 효과를 검증했나요?', exact: true }).click();
+  await expect(page.getByLabel('질문 검색', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('준비 상태 필터', { exact: true })).toHaveValue('all');
+  await expect(editor(page).locator('.editor-question-label')).toHaveText('1-3');
+  await editor(page).getByLabel('나의 답변', { exact: true }).fill('질문 사이를 이동하기 직전에 수정한 답변입니다.');
+  await navigation().getByRole('button', { name: /^꼬리질문 1-4:/ }).click();
+  await expect(editor(page).getByLabel('예상 질문', { exact: true })).toHaveValue('테스트 결과에 영향을 줄 수 있는 변수는 어떻게 통제했나요?');
+  await navigation().getByRole('button', { name: /^부모 질문 1-3:/ }).click();
+  await expect(editor(page).getByLabel('나의 답변', { exact: true })).toHaveValue('질문 사이를 이동하기 직전에 수정한 답변입니다.');
+  await navigation().getByRole('button', { name: /^부모 질문 1-1:/ }).click();
+  await expect(navigation().getByRole('button', { name: /^부모 질문/ })).toHaveCount(0);
+  await expect(navigation().getByRole('button', { name: /^꼬리질문/ })).toHaveCount(2);
+  await navigation().getByRole('button', { name: /^꼬리질문 1-2:/ }).click();
+  await expect(editor(page).getByLabel('예상 질문', { exact: true })).toHaveValue('사용자 인터뷰는 어떤 방식으로 진행했나요?');
+  await navigation().getByRole('button', { name: /^부모 질문 1-1:/ }).click();
+  await navigation().getByRole('button', { name: /^꼬리질문 1-3:/ }).click();
+  await saved(page);
+  await page.reload();
+  await openQuestion(page, '어떤 지표로 개선 효과를 검증했나요?');
+  await expect(editor(page).getByLabel('나의 답변', { exact: true })).toHaveValue('질문 사이를 이동하기 직전에 수정한 답변입니다.');
+});
+
+test('keeps the expanded popup open while navigating linked questions on desktop and mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole('button', { name: '작업 영역 전체화면', exact: true }).click();
+  await questionList(page);
+  await page.locator('.question-list-item').first().click();
+  const popup = page.getByRole('dialog', { name: '질문 크게 편집', exact: true });
+  const navigation = () => popup.getByRole('navigation', { name: '연결된 질문', exact: true });
+  await navigation().getByRole('button', { name: /^꼬리질문 1-3:/ }).click();
+  await expect(popup).toBeVisible();
+  await expect(popup.locator('.editor-question-label')).toHaveText('1-3');
+  await navigation().getByRole('button', { name: /^꼬리질문 1-4:/ }).click();
+  await expect(popup).toBeVisible();
+  await expect(popup.getByLabel('예상 질문', { exact: true })).toHaveValue('테스트 결과에 영향을 줄 수 있는 변수는 어떻게 통제했나요?');
+  await page.setViewportSize({ width: 390, height: 844 });
+  const parent = navigation().getByRole('button', { name: /^부모 질문 1-3:/ });
+  await expect(parent).toBeVisible();
+  const bounds = await parent.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+  await parent.click();
+  await expect(popup).toBeVisible();
+  await expect(popup.locator('.editor-question-label')).toHaveText('1-3');
+  await navigation().getByRole('button', { name: /^부모 질문 1-1:/ }).click();
+  await expect(popup.locator('.editor-question-label')).toHaveText('1-1');
+  await expect(navigation().getByRole('button', { name: /^꼬리질문/ })).toHaveCount(2);
+  expect(await page.evaluate(() => document.body.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.keyboard.press('Escape');
+  await expect(popup).toBeHidden();
+  await expect(page.getByRole('button', { name: '작업 영역 전체화면 종료', exact: true })).toBeVisible();
+});
