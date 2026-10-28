@@ -1,6 +1,6 @@
 import { useEffect, useState, type SyntheticEvent } from 'react';
 import { Check, CheckCheck, ChevronRight, GitBranch, Link2, MessageSquareText, Quote, Trash2, X } from 'lucide-react';
-import type { Interviewer, InterviewNode } from '../types';
+import type { InterviewNode } from '../types';
 import './editor.css';
 
 interface QuestionEditorProps {
@@ -11,8 +11,6 @@ interface QuestionEditorProps {
   onAddChild: (anchor: string) => void;
   onDelete: () => void;
 }
-
-const interviewers: Interviewer[] = ['실무진', '부서장', '인사팀'];
 
 export default function QuestionEditor({ node, parent, onChange, onClose, onAddChild, onDelete }: QuestionEditorProps) {
   const [selection, setSelection] = useState('');
@@ -47,13 +45,6 @@ export default function QuestionEditor({ node, parent, onChange, onClose, onAddC
           <label className="editor-field-label editor-anchor-label" htmlFor="editor-anchor">연결된 키워드</label>
           <input id="editor-anchor" className="editor-anchor-input" value={node.anchor} onChange={event => onChange({ anchor: event.target.value })} placeholder="질문의 출발점이 되는 표현" />
         </div>
-
-        <fieldset className="editor-interviewers">
-          <legend className="editor-field-label">면접관의 관점</legend>
-          <div className="editor-segments">
-            {interviewers.map(interviewer => <button key={interviewer} type="button" className={node.interviewer === interviewer ? 'editor-segment editor-segment-active' : 'editor-segment'} aria-pressed={node.interviewer === interviewer} onClick={() => onChange({ interviewer })}>{interviewer}</button>)}
-          </div>
-        </fieldset>
 
         <div className="editor-field">
           <label className="editor-field-label" htmlFor="editor-question"><span className="editor-label-icon"><MessageSquareText size={14} />예상 질문</span><span className="editor-field-number" aria-hidden="true">01</span></label>

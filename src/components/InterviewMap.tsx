@@ -58,7 +58,6 @@ function QuestionCard({ data }: NodeProps<QuestionFlowNode>) {
       <Handle type="target" position={Position.Left} className="map-handle" />
       <div className="map-card-top">
         <span className="map-question-number">Q{String(index + 1).padStart(2, '0')}</span>
-        <span className={`map-interviewer map-interviewer-${node.interviewer === '인사팀' ? 'hr' : node.interviewer === '부서장' ? 'lead' : 'team'}`}>{node.interviewer}</span>
         <span className={`map-status ${node.status}`} title={node.status === 'ready' ? '준비 완료' : '작성 중'}>{node.status === 'ready' ? <Check size={11} /> : <span />}{node.status === 'ready' ? '준비 완료' : '작성 중'}</span>
       </div>
       <div className="map-anchor" title={node.anchor}><Quote size={11} /><span>{node.anchor || '연결할 표현을 선택해 주세요'}</span></div>
@@ -138,7 +137,7 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, fi
       data: {
         node, index, active: node.id === selectedId,
         childCount: project.nodes.filter((candidate) => candidate.parentId === node.id).length,
-        dimmed: (filter !== 'all' && node.status !== filter) || (!!query && !`${node.question} ${node.answer} ${node.anchor} ${node.interviewer}`.toLocaleLowerCase().includes(query)),
+        dimmed: (filter !== 'all' && node.status !== filter) || (!!query && !`${node.question} ${node.answer} ${node.anchor}`.toLocaleLowerCase().includes(query)),
         onSelect, onAdd,
       },
     }))];

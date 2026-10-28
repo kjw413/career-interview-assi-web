@@ -12,10 +12,6 @@
 .map-question-card.is-dimmed{opacity:.26}
 .map-card-top{display:flex;align-items:center;gap:7px;margin-bottom:15px;line-height:1}
 .map-question-number{font-size:16px;font-weight:700;letter-spacing:.5px;color:#87948b}
-.map-interviewer{font-size:16px;font-weight:600;line-height:1;padding:4px 6px;border-radius:4px}
-.map-interviewer-team{color:#47725a;background:#edf5eb}
-.map-interviewer-lead{color:#7e6c9c;background:#f2eef8}
-.map-interviewer-hr{color:#a47a40;background:#faf3e7}
 .map-status{margin-left:auto;display:inline-flex;align-items:center;gap:3px;font-size:16px;white-space:nowrap;color:#839187}
 .map-status.ready{color:#6a8a70}.map-status.draft{color:#a79c7f}
 .map-status.draft>span{width:5px;height:5px;background:#d3b56c;border-radius:50%;margin-right:2px}

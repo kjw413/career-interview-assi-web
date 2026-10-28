@@ -24,7 +24,6 @@ export function createNode(parentId: string | null, anchor: string): InterviewNo
     anchor: anchor.trim(),
     question: '',
     answer: '',
-    interviewer: '실무진',
     status: 'draft',
   };
 }

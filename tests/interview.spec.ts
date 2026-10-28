@@ -121,6 +121,7 @@ test('starts with an explicit fictional sample, six linked questions and functio
   await expect(page.getByLabel('면접 질문 마인드맵')).toBeVisible();
   await expect(page.locator('.react-flow__node-question')).toHaveCount(6);
   await expect(page.locator('.react-flow__edge')).toHaveCount(6);
+  await expect(page.locator('.map-interviewer')).toHaveCount(0);
   await expect(page.getByText('가상의 예시 이력서', { exact: true })).toBeVisible();
   await questionList(page);
   await expect(page.locator('.question-list-item')).toHaveCount(6);
@@ -156,6 +157,7 @@ test('autosaves edits across reload and requires question plus answer for comple
   await page.getByRole('button', { name: '질문 추가', exact: true }).click();
   const completion = editor(page).getByRole('checkbox');
   await expect(completion).toBeDisabled();
+  await expect(editor(page).getByText('면접관의 관점', { exact: true })).toHaveCount(0);
   await editor(page).getByLabel('예상 질문', { exact: false }).fill('새 질문이 저장되나요?');
   await expect(completion).toBeDisabled();
   await editor(page).getByLabel('나의 답변', { exact: false }).fill('브라우저에 작성한 내용을 보관합니다.');
@@ -199,13 +201,14 @@ test('exports and imports a complete backup as an independent application', asyn
   const exported = JSON.parse(text);
   expect(exported.schemaVersion).toBe(1);
   expect(exported.project.nodes).toHaveLength(6);
-  await page.getByLabel('면접 백업 파일', { exact: true }).setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(text) });
+  await page.getByLabel('면접 백업 파일', { exact: true }).setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...exported, project: { ...exported.project, nodes: exported.project.nodes.map((node: Record<string, unknown>) => ({ ...node, interviewer: '실무진' })) } })) });
   await expect(page.getByRole('navigation', { name: '지원서 목록' }).getByRole('button')).toHaveCount(2);
   await expect(page.getByText('백업을 새로운 지원서로 불러왔습니다.', { exact: true })).toBeVisible();
   await questionList(page);
   await expect(page.locator('.question-list-item')).toHaveCount(6);
   await saved(page);
   const restored = JSON.parse(await downloadBackup(page));
+  expect(restored.project.nodes.every((node: Record<string, unknown>) => !('interviewer' in node))).toBe(true);
   expect(restored.project.id).not.toBe(exported.project.id);
   expect(restored.project.resume).toEqual(exported.project.resume);
   expect(restored.project.nodes.map((node: { question: string }) => node.question)).toEqual(exported.project.nodes.map((node: { question: string }) => node.question));

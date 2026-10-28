@@ -43,9 +43,8 @@ function validateResume(value: unknown): ResumeData | null {
 }
 
 function validateNode(value: unknown): InterviewNode {
+  // Accept the retired field in existing v1 backups, but omit it from new exports.
   const source = record(value, '질문', ['id', 'parentId', 'anchor', 'question', 'answer', 'interviewer', 'status', 'position']);
-  const interviewer = source.interviewer;
-  if (interviewer !== '실무진' && interviewer !== '부서장' && interviewer !== '인사팀') invalid('면접관 유형이 올바르지 않습니다.');
   const status = source.status;
   if (status !== 'draft' && status !== 'ready') invalid('질문의 작성 상태가 올바르지 않습니다.');
   const node: InterviewNode = {
@@ -54,7 +53,6 @@ function validateNode(value: unknown): InterviewNode {
     anchor: string(source.anchor, '연결된 구절', 4_000, false),
     question: string(source.question, '질문 내용', 20_000, false),
     answer: string(source.answer, '답변 내용', 100_000, false),
-    interviewer,
     status,
   };
   if (source.position !== undefined) {

@@ -18,12 +18,6 @@
 .editor-anchor-input{font:inherit;font-size:14px;line-height:1.6;color:#395836;font-weight:550;border:0;border-bottom:1px solid transparent;border-radius:2px;width:100%;background:transparent;outline:none;padding:0 0 2px;min-width:0}
 .editor-anchor-input:focus{border-color:#9caf89}
 .editor-anchor-input::placeholder{color:#9ca991;font-size:14px;font-weight:400}
-.editor-interviewers{border:0;padding:0;margin:0 0 23px;min-width:0}
-.editor-interviewers legend{padding:0}
-.editor-segments{background:#f4f6f2;padding:3px;border-radius:8px;display:flex;gap:3px}
-.editor-segment{font:inherit;cursor:pointer;flex:1;background:transparent;border:1px solid transparent;border-radius:6px;font-size:14px;line-height:1.6;padding:7px 8px;color:#8a9488;transition:all .15s}
-.editor-segment:hover{color:#365543;background:#edf1e8}
-.editor-segment-active{background:white;border-color:#e2e7dd;box-shadow:0 1px 3px #1d382b08;color:#3b624b;font-weight:650}
 .editor-field{margin-bottom:22px}
 .editor-label-icon{display:flex;align-items:center;gap:6px}
 .editor-label-icon svg{color:#7f978a}

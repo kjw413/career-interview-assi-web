@@ -36,6 +36,21 @@ describe('project backups', () => {
     expect(original.isDemo).toBe(true);
   });
 
+  it('accepts legacy interviewer fields while preserving questions, answers and branch links', () => {
+    const original = createDemoProject();
+    const legacy = { ...original, nodes: original.nodes.map((node, index) => ({ ...node, interviewer: ['실무진', '부서장', '인사팀'][index % 3] })) };
+    const restored = parseProjectBackup(JSON.stringify({ schemaVersion: 1, project: legacy }));
+    expect(restored.nodes.map(({ question, answer, anchor, status }) => ({ question, answer, anchor, status })))
+      .toEqual(original.nodes.map(({ question, answer, anchor, status }) => ({ question, answer, anchor, status })));
+    original.nodes.forEach((node, index) => {
+      const parentIndex = original.nodes.findIndex((candidate) => candidate.id === node.parentId);
+      expect(restored.nodes[index].parentId).toBe(parentIndex < 0 ? null : restored.nodes[parentIndex].id);
+    });
+    expect(restored.nodes.every((node) => !('interviewer' in node))).toBe(true);
+    expect(JSON.parse(serializeProject(legacy)).project.nodes.every((node: Record<string, unknown>) => !('interviewer' in node))).toBe(true);
+    expect(createNode(null, '키워드')).not.toHaveProperty('interviewer');
+  });
+
   it('imports the same backup twice as separate applications', () => {
     const text = backup();
     const first = parseProjectBackup(text);
@@ -74,9 +89,8 @@ describe('project backups', () => {
     expect(() => parseProjectBackup(backup((project) => { project.nodes[0].parentId = project.nodes[0].id; }))).toThrow('순환');
   });
 
-  it('rejects malformed roles, statuses, coordinates, and source fields', () => {
+  it('rejects malformed statuses, coordinates, and source fields', () => {
     const malformed = [
-      (project: ReturnType<typeof createDemoProject>) => { (project.nodes[0] as unknown as Record<string, unknown>).interviewer = 'unknown'; },
       (project: ReturnType<typeof createDemoProject>) => { (project.nodes[0] as unknown as Record<string, unknown>).status = true; },
       (project: ReturnType<typeof createDemoProject>) => { project.nodes[0].position = { x: Infinity, y: 0 }; },
       (project: ReturnType<typeof createDemoProject>) => { project.resume!.pages = 0; },

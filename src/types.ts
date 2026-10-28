@@ -1,5 +1,3 @@
-export type Interviewer = '실무진' | '부서장' | '인사팀';
-
 export interface ResumeData {
   name: string;
   text: string;
@@ -14,7 +12,6 @@ export interface InterviewNode {
   anchor: string;
   question: string;
   answer: string;
-  interviewer: Interviewer;
   status: 'draft' | 'ready';
   position?: { x: number; y: number };
 }
