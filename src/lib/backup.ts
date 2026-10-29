@@ -1,5 +1,6 @@
 import type { InterviewNode, Project, ResumeData } from '../types';
 import { validateTextFormatting } from './textFormatting';
+import { validateAnswerStylePresets } from './answerStylePresets';
 
 export const MAX_BACKUP_BYTES = 5 * 1024 * 1024;
 const MAX_NODES = 2_000;
@@ -71,7 +72,7 @@ function validateNode(value: unknown): InterviewNode {
 }
 
 function validateProject(value: unknown): Project {
-  const source = record(value, '지원서', ['id', 'company', 'role', 'companyColor', 'createdAt', 'updatedAt', 'resume', 'nodes', 'isDemo']);
+  const source = record(value, '지원서', ['id', 'company', 'role', 'companyColor', 'createdAt', 'updatedAt', 'resume', 'nodes', 'answerStylePresets', 'isDemo']);
   if (typeof source.companyColor !== 'string' || !/^#[\da-f]{6}$/i.test(source.companyColor)) invalid('기업 표시 색상이 올바르지 않습니다.');
   if (!Array.isArray(source.nodes) || source.nodes.length > MAX_NODES) invalid(`질문은 최대 ${MAX_NODES.toLocaleString('ko-KR')}개까지 불러올 수 있습니다.`);
   if (source.isDemo !== undefined && typeof source.isDemo !== 'boolean') invalid('샘플 지원서 정보가 올바르지 않습니다.');
@@ -95,6 +96,11 @@ function validateProject(value: unknown): Project {
     }
     for (const id of path) completed.add(id);
   }
+  let answerStylePresets: Project['answerStylePresets'];
+  if (source.answerStylePresets !== undefined) {
+    try { answerStylePresets = validateAnswerStylePresets(source.answerStylePresets); }
+    catch (error) { invalid(error instanceof Error ? error.message : '저장한 답변 서식을 확인해 주세요.'); }
+  }
   return {
     id: string(source.id, '지원서 ID', 160),
     company: string(source.company, '기업명', 160),
@@ -104,6 +110,7 @@ function validateProject(value: unknown): Project {
     updatedAt: finiteNumber(source.updatedAt, '수정 시각', 0, 8_640_000_000_000_000),
     resume: validateResume(source.resume),
     nodes,
+    ...(answerStylePresets !== undefined ? { answerStylePresets } : {}),
     ...(source.isDemo !== undefined ? { isDemo: source.isDemo } : {}),
   };
 }

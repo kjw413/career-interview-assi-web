@@ -347,6 +347,7 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
   const questionEditor = selected && selectedEntry && <QuestionEditor key={selected.id}
     variant={workspaceExpanded ? 'dialog' : 'panel'} node={selected} parent={selectedParent?.node ?? null}
     questionLabel={selectedEntry.label} parentLabel={selectedParent?.label} childQuestions={childQuestions}
+    stylePresets={active?.answerStylePresets ?? []} onStylePresetsChange={(answerStylePresets) => { if (active) updateProject(active.id, { answerStylePresets }); }}
     onNavigate={navigateQuestion} onChange={updateNode} onClose={() => setSelectedId(null)}
     onAddChild={(anchor) => addQuestion(selected.id, anchor)} onDelete={deleteBranch} />;
 

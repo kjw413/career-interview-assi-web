@@ -1,4 +1,5 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { createDemoProject } from '../src/lib/demo';
 
 const host = 'https://folio-cloud-test.supabase.co';
 const ids = { 'a@example.com': '11111111-1111-4111-8111-111111111111', 'b@example.com': '22222222-2222-4222-8222-222222222222' };
@@ -88,6 +89,83 @@ test('shares cloud projects across two independent browsers and isolates a secon
   await expect(second.getByRole('heading', { name: '좋은 면접은, 좋은 준비에서.' })).toBeVisible();
   await expect(second.getByRole('navigation', { name: '지원서 목록' })).not.toContainText('기기 간 공유 기업');
   await laptop.close();
+});
+
+test('saves answer styles through the editor and shares them with another browser without changing answer text', async ({ browser, page, context }) => {
+  const backend = new Backend();
+  const project = { ...createDemoProject(), id: 'cloud-answer-presets', company: '서식 공유 기업', isDemo: false };
+  const key = `${ids['a@example.com']}/${project.id}`;
+  backend.rows.set(key, { id: project.id, user_id: ids['a@example.com'], data: project as unknown as Record<string, unknown>, revision: 1, pdf_path: null });
+  await backend.install(context);
+  await login(page);
+  await page.getByRole('tab', { name: '질문 목록', exact: true }).click();
+  await page.locator('[data-question-id="demo-q1"] .list-question-open').click();
+
+  async function selectAnswerPhrase(target: Page, phrase: string) {
+    const field = target.getByRole('textbox', { name: '나의 답변', exact: true });
+    await field.focus();
+    await field.evaluate((element, picked) => {
+      const document = element.ownerDocument;
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      const textNodes: Text[] = [];
+      while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
+      const start = textNodes.map(node => node.textContent).join('').indexOf(picked);
+      if (start < 0) throw new Error(`Missing answer phrase: ${picked}`);
+      const range = document.createRange();
+      let offset = 0;
+      for (const node of textNodes) {
+        const end = offset + node.length;
+        if (start >= offset && start < end) range.setStart(node, start - offset);
+        if (start + picked.length > offset && start + picked.length <= end) {
+          range.setEnd(node, start + picked.length - offset);
+          break;
+        }
+        offset = end;
+      }
+      const selection = document.getSelection()!;
+      selection.removeAllRanges(); selection.addRange(range);
+      document.dispatchEvent(new Event('selectionchange', { bubbles: true }));
+      element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    }, phrase);
+  }
+
+  await selectAnswerPhrase(page, '사용자');
+  await page.getByRole('textbox', { name: '나의 답변', exact: true }).press('Control+b');
+  await page.getByRole('button', { name: '서식 저장', exact: true }).click();
+  await page.getByLabel('서식 이름', { exact: true }).fill('클라우드 핵심');
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+  await expect.poll(() => backend.rows.get(key)?.data.answerStylePresets).toEqual([
+    { id: expect.any(String), name: '클라우드 핵심', bold: true },
+  ]);
+  await expect(page.getByText('모든 변경사항 저장됨', { exact: true })).toBeVisible();
+  const savedRevision = backend.rows.get(key)!.revision;
+
+  const laptop = await browser.newContext({ baseURL: 'http://127.0.0.1:5174' });
+  try {
+    await backend.install(laptop);
+    const second = await laptop.newPage();
+    await login(second);
+    await second.getByRole('tab', { name: '질문 목록', exact: true }).click();
+    await second.locator('[data-question-id="demo-q5"] .list-question-open').click();
+    const field = second.getByRole('textbox', { name: '나의 답변', exact: true });
+    const originalAnswer = project.nodes.find(node => node.id === 'demo-q5')!.answer;
+    await expect(field).toHaveText(originalAnswer);
+    const applyStyle = second.getByRole('button', { name: '저장한 서식 클라우드 핵심 적용', exact: true });
+    await expect(applyStyle).toBeVisible();
+    await expect(applyStyle).toBeDisabled();
+    await selectAnswerPhrase(second, '각 팀');
+    await expect(applyStyle).toBeEnabled();
+    await applyStyle.click();
+    await expect(field.locator('strong')).toHaveText('각 팀');
+    await expect(field).toHaveText(originalAnswer);
+    await expect.poll(() => {
+      const nodes = backend.rows.get(key)?.data.nodes as Array<{ id: string; answer: string; answerFormatting?: unknown }> | undefined;
+      const answer = nodes?.find(node => node.id === 'demo-q5');
+      return { text: answer?.answer, formatting: answer?.answerFormatting };
+    }).toEqual({ text: originalAnswer, formatting: [{ start: 0, end: 3, bold: true }] });
+    await expect(second.getByText('모든 변경사항 저장됨', { exact: true })).toBeVisible();
+    expect(backend.rows.get(key)!.revision).toBeGreaterThan(savedRevision);
+  } finally { await laptop.close(); }
 });
 
 test('does not overwrite newer changes from another device and allows safe reload', async ({ page, context }) => {

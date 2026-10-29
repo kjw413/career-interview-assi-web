@@ -82,6 +82,40 @@ describe('project backups', () => {
     expect(restored.nodes[1]).not.toHaveProperty('answerFormatting');
   });
 
+  it('restores named answer styles alongside applied answer formatting and legacy question formatting', () => {
+    const original = createDemoProject();
+    original.answerStylePresets = [
+      { id: 'keyword', name: '핵심 키워드', bold: true, color: '#b42318', backgroundColor: '#fff1a8' },
+      { id: 'normal', name: '기본', bold: false },
+    ];
+    original.nodes[0].answerFormatting = [{ start: 0, end: 3, bold: true, color: '#b42318', backgroundColor: '#fff1a8' }];
+    original.nodes[0].questionFormatting = [{ start: 0, end: 2, bold: true }];
+    const restored = parseProjectBackup(serializeProject(original));
+    expect(restored.answerStylePresets).toEqual(original.answerStylePresets);
+    expect(restored.nodes[0].answerFormatting).toEqual(original.nodes[0].answerFormatting);
+    expect(restored.nodes[0].questionFormatting).toEqual(original.nodes[0].questionFormatting);
+    expect(restored.nodes[0].id).not.toBe(original.nodes[0].id);
+    expect(restored.answerStylePresets?.[0].id).toBe('keyword');
+    expect(parseProjectBackup(backup())).not.toHaveProperty('answerStylePresets');
+    expect(JSON.parse(serializeProject(createDemoProject())).project).not.toHaveProperty('answerStylePresets');
+    original.answerStylePresets = [];
+    expect(parseProjectBackup(serializeProject(original)).answerStylePresets).toEqual([]);
+  });
+
+  it('rejects malformed saved answer styles in backup imports and exports', () => {
+    const invalid = [
+      [{ id: 'x', name: '서식', bold: true, color: 'url(evil)' }],
+      [{ id: 'x', name: '서식', bold: true }, { id: 'x', name: '다른 서식', bold: false }],
+      [{ id: 'x', name: '서식', bold: true }, { id: 'y', name: '서식', bold: false }],
+      [{ id: 'x', name: '서식', bold: true, extra: 'unexpected' }],
+    ];
+    for (const answerStylePresets of invalid) {
+      const project = Object.assign(createDemoProject(), { answerStylePresets });
+      expect(() => parseProjectBackup(JSON.stringify({ schemaVersion: 1, project }))).toThrow('저장한 답변 서식');
+      expect(() => serializeProject(project)).toThrow('저장한 답변 서식');
+    }
+  });
+
   it('rejects unsafe colors, mismatched ranges and unknown formatting properties in backups', () => {
     const invalidFormatting = [
       [{ start: 0, end: 1, color: 'url(evil)' }],

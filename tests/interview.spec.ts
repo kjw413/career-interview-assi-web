@@ -254,7 +254,7 @@ test('fits a small mobile viewport and keeps question editing usable', async ({ 
   await expect(editor(page)).toBeVisible();
   await editor(page).getByLabel('예상 질문', { exact: true }).fill('모바일에서도 질문을 작성할 수 있나요?');
   await saved(page);
-  await expect(editor(page).getByLabel('예상 질문', { exact: true })).toHaveText('모바일에서도 질문을 작성할 수 있나요?');
+  await expect(editor(page).getByLabel('예상 질문', { exact: true })).toHaveValue('모바일에서도 질문을 작성할 수 있나요?');
   const widths = await page.evaluate(() => ({ viewport: window.innerWidth, body: document.body.scrollWidth, root: document.documentElement.scrollWidth }));
   expect(widths.body).toBeLessThanOrEqual(widths.viewport);
   expect(widths.root).toBeLessThanOrEqual(widths.viewport);
@@ -317,7 +317,7 @@ test('uses the popup for list cards, keeps follow-up editing open and closes nes
   await page.keyboard.press('Escape');
   await expect(confirm).toBeHidden();
   await expect(popup).toBeVisible();
-  await expect(popup.getByLabel('예상 질문', { exact: true })).toHaveText('팝업에서 이어진 꼬리질문');
+  await expect(popup.getByLabel('예상 질문', { exact: true })).toHaveValue('팝업에서 이어진 꼬리질문');
   await page.keyboard.press('Escape');
   await expect(popup).toBeHidden();
   await expect(page.getByRole('button', { name: '작업 영역 전체화면 종료', exact: true })).toBeVisible();
@@ -382,14 +382,14 @@ test('navigates parent and sibling branches from filtered questions and preserve
   await expect(editor(page).locator('.editor-question-label')).toHaveText('1-3');
   await editor(page).getByLabel('나의 답변', { exact: true }).fill('질문 사이를 이동하기 직전에 수정한 답변입니다.');
   await navigation().getByRole('button', { name: /^꼬리질문 1-4:/ }).click();
-  await expect(editor(page).getByLabel('예상 질문', { exact: true })).toHaveText('테스트 결과에 영향을 줄 수 있는 변수는 어떻게 통제했나요?');
+  await expect(editor(page).getByLabel('예상 질문', { exact: true })).toHaveValue('테스트 결과에 영향을 줄 수 있는 변수는 어떻게 통제했나요?');
   await navigation().getByRole('button', { name: /^부모 질문 1-3:/ }).click();
   await expect(editor(page).getByLabel('나의 답변', { exact: true })).toHaveText('질문 사이를 이동하기 직전에 수정한 답변입니다.');
   await navigation().getByRole('button', { name: /^부모 질문 1-1:/ }).click();
   await expect(navigation().getByRole('button', { name: /^부모 질문/ })).toHaveCount(0);
   await expect(navigation().getByRole('button', { name: /^꼬리질문/ })).toHaveCount(2);
   await navigation().getByRole('button', { name: /^꼬리질문 1-2:/ }).click();
-  await expect(editor(page).getByLabel('예상 질문', { exact: true })).toHaveText('사용자 인터뷰는 어떤 방식으로 진행했나요?');
+  await expect(editor(page).getByLabel('예상 질문', { exact: true })).toHaveValue('사용자 인터뷰는 어떤 방식으로 진행했나요?');
   await navigation().getByRole('button', { name: /^부모 질문 1-1:/ }).click();
   await navigation().getByRole('button', { name: /^꼬리질문 1-3:/ }).click();
   await saved(page);
@@ -410,7 +410,7 @@ test('keeps the expanded popup open while navigating linked questions on desktop
   await expect(popup.locator('.editor-question-label')).toHaveText('1-3');
   await navigation().getByRole('button', { name: /^꼬리질문 1-4:/ }).click();
   await expect(popup).toBeVisible();
-  await expect(popup.getByLabel('예상 질문', { exact: true })).toHaveText('테스트 결과에 영향을 줄 수 있는 변수는 어떻게 통제했나요?');
+  await expect(popup.getByLabel('예상 질문', { exact: true })).toHaveValue('테스트 결과에 영향을 줄 수 있는 변수는 어떻게 통제했나요?');
   await page.setViewportSize({ width: 390, height: 844 });
   const parent = navigation().getByRole('button', { name: /^부모 질문 1-3:/ });
   await expect(parent).toBeVisible();
@@ -579,38 +579,14 @@ test('clears selected keyword formatting and can undo the change in the large ed
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
-test('formats question keywords and pastes only plain text without adding unwanted paragraph breaks', async ({ page }) => {
+test('keeps questions plain and pastes answer text without importing HTML or extra paragraph breaks', async ({ page }) => {
   await openQuestion(page, '바이브 코딩으로 실제 문제를 해결한 경험을 이야기해 주세요.');
   await fillQuestion(page, '앞뒤', '');
   const question = editor(page).getByLabel('예상 질문', { exact: true });
-  await question.focus();
-  await question.evaluate(element => {
-    const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-    const text = walker.nextNode()!;
-    const range = element.ownerDocument.createRange();
-    range.setStart(text, 1);
-    range.collapse(true);
-    const selection = element.ownerDocument.getSelection()!;
-    selection.removeAllRanges();
-    selection.addRange(range);
-    element.ownerDocument.dispatchEvent(new Event('selectionchange', { bubbles: true }));
-    element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-  });
-  await question.evaluate(element => {
-    const clipboard = new DataTransfer();
-    clipboard.setData('text/plain', '핵심');
-    clipboard.setData('text/html', '<img src="invalid" onerror="window.folioPasteExecuted=true"><script>window.folioPasteExecuted=true</script>');
-    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: clipboard, bubbles: true, cancelable: true }));
-  });
-  await expect.poll(() => question.innerText()).toBe('앞핵심뒤');
-  await expect(question.locator('img,script')).toHaveCount(0);
-  const toolbar = editor(page).getByRole('toolbar', { name: '예상 질문 서식', exact: true });
-  await selectRichText(page, '예상 질문', '핵심');
-  await toolbar.getByRole('button', { name: '굵게', exact: true }).click();
-  await toolbar.getByRole('button', { name: '배경색', exact: true }).click();
-  await toolbar.getByRole('button', { name: '배경색 하늘', exact: true }).click();
-  await expect(question.locator('strong')).toHaveText('핵심');
-  await expect(question.locator('span[style*="background-color"]')).toHaveCSS('background-color', 'rgb(219, 234, 254)');
+  await expect(question).toHaveJSProperty('tagName', 'TEXTAREA');
+  await expect(editor(page).getByRole('toolbar', { name: '예상 질문 서식', exact: true })).toHaveCount(0);
+  await question.fill('앞핵심뒤');
+  await expect(question).toHaveValue('앞핵심뒤');
 
   const answer = editor(page).getByLabel('나의 답변', { exact: true });
   await answer.focus();
@@ -628,14 +604,126 @@ test('formats question keywords and pastes only plain text without adding unwant
   const snapshot = JSON.parse(await downloadBackup(page)).project.nodes.find((node: { id: string }) => node.id === 'demo-q6');
   expect(snapshot.question).toBe('앞핵심뒤');
   expect(snapshot.answer).toBe('첫째\n둘째');
-  expect(snapshot.questionFormatting).toEqual([{ start: 1, end: 3, bold: true, backgroundColor: '#dbeafe' }]);
-
+  expect(snapshot.questionFormatting ?? []).toEqual([]);
   await closeEditor(page);
-  const listKeyword = page.locator('[data-question-id="demo-q6"] .list-question-copy strong .formatted-keyword');
-  await expect(listKeyword).toHaveText('핵심');
-  await expect(listKeyword).toHaveCSS('background-color', 'rgb(219, 234, 254)');
-  await page.getByRole('tab', { name: '마인드맵', exact: true }).click();
-  const mapKeyword = page.locator('.react-flow__node-question[data-id="demo-q6"] .map-question-open .formatted-keyword');
-  await expect(mapKeyword).toHaveText('핵심');
-  await expect(mapKeyword).toHaveCSS('background-color', 'rgb(219, 234, 254)');
+  await expect(page.locator('[data-question-id="demo-q6"] .list-question-copy strong')).toHaveText('앞핵심뒤');
+  await expect(page.locator('[data-question-id="demo-q6"] .list-question-copy strong .formatted-keyword')).toHaveCount(0);
+});
+
+async function saveAnswerPreset(page: Page, name: string) {
+  await editor(page).getByRole('button', { name: '서식 저장', exact: true }).click();
+  await editor(page).getByLabel('서식 이름', { exact: true }).fill(name);
+  await editor(page).getByRole('button', { name: '저장', exact: true }).click();
+  await expect(editor(page).getByRole('button', { name: `저장한 서식 ${name} 적용`, exact: true })).toBeVisible();
+}
+
+async function emphasizeAnswerPhrase(page: Page, phrase: string) {
+  const toolbar = editor(page).getByRole('toolbar', { name: '나의 답변 서식', exact: true });
+  await selectRichText(page, '나의 답변', phrase);
+  await toolbar.getByRole('button', { name: '굵게', exact: true }).click();
+  await toolbar.getByRole('button', { name: '글자색', exact: true }).click();
+  await toolbar.getByRole('button', { name: '글자색 빨강', exact: true }).click();
+  await toolbar.getByRole('button', { name: '배경색', exact: true }).click();
+  await toolbar.getByRole('button', { name: '배경색 노랑', exact: true }).click();
+}
+
+test('saves answer emphasis and applies the complete style with one click across answers and backups', async ({ page }) => {
+  await openQuestion(page, '바이브 코딩으로 실제 문제를 해결한 경험을 이야기해 주세요.');
+  await fillQuestion(page, '서식 원본 질문', '원본 대상 결과');
+  const answer = () => editor(page).getByLabel('나의 답변', { exact: true });
+  const toolbar = () => editor(page).getByRole('toolbar', { name: '나의 답변 서식', exact: true });
+  await emphasizeAnswerPhrase(page, '원본');
+  await saveAnswerPreset(page, '핵심');
+  await selectRichText(page, '나의 답변', '대상');
+  await toolbar().getByRole('button', { name: '글자색', exact: true }).click();
+  await toolbar().getByRole('button', { name: '글자색 파랑', exact: true }).click();
+  await toolbar().getByRole('button', { name: '배경색', exact: true }).click();
+  await toolbar().getByRole('button', { name: '배경색 연두', exact: true }).click();
+  const apply = () => editor(page).getByRole('button', { name: '저장한 서식 핵심 적용', exact: true });
+  await apply().click();
+  const target = () => answer().locator('span[style*="background-color"]').filter({ hasText: '대상' });
+  await expect(target()).toHaveCSS('color', 'rgb(180, 35, 24)');
+  await expect(target()).toHaveCSS('background-color', 'rgb(255, 241, 168)');
+  await expect(answer().locator('strong')).toHaveText(['원본', '대상']);
+  await apply().click();
+  await expect(answer().locator('strong')).toHaveText(['원본', '대상']);
+  await expect(answer()).toHaveText('원본 대상 결과');
+  await expect(editor(page).locator('#editor-answer-count')).toContainText('공백 포함 8자');
+  await selectAnswerText(page, '결과');
+  await fillQuestion(page, '다른 답변의 질문', '성과를 설명합니다.');
+  await selectRichText(page, '나의 답변', '성과');
+  await apply().click();
+  await expect(answer().locator('strong')).toHaveText('성과');
+  await expect(answer().locator('span[style*="background-color"]')).toHaveCSS('background-color', 'rgb(255, 241, 168)');
+  await saved(page);
+  const backup = await downloadBackup(page);
+  const snapshot = JSON.parse(backup).project;
+  expect(snapshot.answerStylePresets).toEqual([expect.objectContaining({ name: '핵심', bold: true, color: '#b42318', backgroundColor: '#fff1a8' })]);
+  const original = snapshot.nodes.find((node: { question: string }) => node.question === '서식 원본 질문');
+  expect(original.answer).toBe('원본 대상 결과');
+  expect(original.answerFormatting).toEqual([
+    { start: 0, end: 2, bold: true, color: '#b42318', backgroundColor: '#fff1a8' },
+    { start: 3, end: 5, bold: true, color: '#b42318', backgroundColor: '#fff1a8' },
+  ]);
+  await page.reload();
+  await openQuestion(page, '다른 답변의 질문');
+  await expect(apply()).toBeVisible();
+  await expect(answer().locator('strong')).toHaveText('성과');
+  await page.getByLabel('면접 백업 파일', { exact: true }).setInputFiles({ name: 'saved-style.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
+  await openQuestion(page, '서식 원본 질문');
+  await expect(apply()).toBeVisible();
+  await selectRichText(page, '나의 답변', '결과');
+  await apply().click();
+  await expect(answer().locator('strong')).toHaveText(['원본', '대상', '결과']);
+});
+
+test('copies default formatting exactly and deletes a saved style without erasing applied emphasis', async ({ page }) => {
+  await openQuestion(page, '바이브 코딩으로 실제 문제를 해결한 경험을 이야기해 주세요.');
+  await fillQuestion(page, '기본 서식도 복사할 수 있나요?', '일반 강조');
+  const answer = editor(page).getByLabel('나의 답변', { exact: true });
+  await expect(editor(page).getByRole('button', { name: '서식 저장', exact: true })).toBeDisabled();
+  await selectRichText(page, '나의 답변', '일반');
+  await saveAnswerPreset(page, '기본');
+  await emphasizeAnswerPhrase(page, '강조');
+  await editor(page).getByRole('button', { name: '저장한 서식 기본 적용', exact: true }).click();
+  await expect(answer.locator('strong,span[style*="color"]')).toHaveCount(0);
+  await expect(answer).toHaveText('일반 강조');
+  await emphasizeAnswerPhrase(page, '강조');
+  await saveAnswerPreset(page, '암기');
+  await editor(page).getByRole('button', { name: '저장한 서식 암기 삭제', exact: true }).click();
+  await expect(editor(page).getByRole('button', { name: '저장한 서식 암기 적용', exact: true })).toHaveCount(0);
+  await expect(answer.locator('strong')).toHaveText('강조');
+  await expect(answer.locator('span[style*="background-color"]')).toHaveCSS('background-color', 'rgb(255, 241, 168)');
+  await saved(page);
+  await page.reload();
+  await openQuestion(page, '기본 서식도 복사할 수 있나요?');
+  await expect(editor(page).getByRole('button', { name: '저장한 서식 기본 적용', exact: true })).toBeVisible();
+  await expect(editor(page).getByRole('button', { name: '저장한 서식 암기 적용', exact: true })).toHaveCount(0);
+  await expect(editor(page).getByLabel('나의 답변', { exact: true }).locator('strong')).toHaveText('강조');
+});
+
+test('keeps saved answer styles separate between applications and usable in the mobile popup', async ({ page }) => {
+  await openQuestion(page, '바이브 코딩으로 실제 문제를 해결한 경험을 이야기해 주세요.');
+  await fillQuestion(page, '지원서별 서식', '암기할 키워드');
+  await emphasizeAnswerPhrase(page, '키워드');
+  await saveAnswerPreset(page, '면접 핵심');
+  await saved(page);
+  await closeEditor(page);
+  await createApplication(page, '서식분리기업', '개발자');
+  await uploadResume(page);
+  await selectResumeText(page, 'React');
+  await expect(editor(page).getByRole('group', { name: '저장한 답변 서식', exact: true })).toHaveCount(0);
+  await closeEditor(page);
+  await page.getByRole('navigation', { name: '지원서 목록' }).getByRole('button').filter({ hasText: '토스' }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: '작업 영역 전체화면', exact: true }).click();
+  await openQuestion(page, '지원서별 서식');
+  const apply = editor(page).getByRole('button', { name: '저장한 서식 면접 핵심 적용', exact: true });
+  await selectRichText(page, '나의 답변', '암기할');
+  await apply.click();
+  await expect(editor(page).getByLabel('나의 답변', { exact: true }).locator('strong')).toHaveText(['암기할', '키워드']);
+  const bounds = await apply.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

@@ -62,7 +62,7 @@ function QuestionCard({ data }: NodeProps<QuestionFlowNode>) {
         <span className={`map-status ${node.status}`} title={node.status === 'ready' ? '준비 완료' : '작성 중'}>{node.status === 'ready' ? <Check size={11} /> : <span />}{node.status === 'ready' ? '준비 완료' : '작성 중'}</span>
       </div>
       <div className="map-anchor" title={node.anchor}><Quote size={11} /><span>{node.anchor || '연결할 표현을 선택해 주세요'}</span></div>
-      <button className="map-question-open nodrag" onClick={(event) => { event.stopPropagation(); onSelect(node.id); }}><FormattedText text={node.question || '어떤 질문을 준비할까요?'} formatting={node.questionFormatting} /></button>
+      <button className="map-question-open nodrag" onClick={(event) => { event.stopPropagation(); onSelect(node.id); }}>{node.question || '어떤 질문을 준비할까요?'}</button>
       <p
         className={`map-answer-preview nodrag nopan${!node.answer ? ' is-empty' : ''}`}
         onMouseUp={(event) => readSelection(event.currentTarget)}

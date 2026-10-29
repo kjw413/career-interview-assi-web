@@ -51,7 +51,7 @@ function SortableQuestionGroup({ group, byId, selectedId, disabled, disabledReas
               <span>부모 {parent.label}</span><ChevronRight size={13} aria-hidden="true" /><span>{label}</span>
             </span>}
             <span className="list-item-meta"><span>{parent ? <GitBranch size={12} /> : <FileText size={12} />}{node.anchor || '연결 키워드 없음'}</span></span>
-            <strong><FormattedText text={node.question || '새로운 질문을 작성해 주세요'} formatting={node.questionFormatting} /></strong>
+            <strong>{node.question || '새로운 질문을 작성해 주세요'}</strong>
             <span className="list-answer-preview"><FormattedText text={node.answer || '아직 답변을 작성하지 않았어요.'} formatting={node.answerFormatting} /></span>
           </span>
           <span className={`list-status ${node.status}`}><span />{node.status === 'ready' ? '준비 완료' : '작성 중'}</span>
