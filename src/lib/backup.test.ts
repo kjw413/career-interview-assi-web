@@ -68,6 +68,32 @@ describe('project backups', () => {
     expect(restored.nodes[0].answer).toBe('');
   });
 
+  it('keeps inline question and answer formatting through backup import and remapped branches', () => {
+    const original = createDemoProject();
+    original.nodes[0].questionFormatting = [{ start: 0, end: 3, bold: true }];
+    original.nodes[0].answerFormatting = [{ start: 0, end: 3, color: '#b83232', backgroundColor: '#fff1a8' }];
+    const restored = parseProjectBackup(serializeProject(original));
+    expect(restored.nodes[0].questionFormatting).toEqual(original.nodes[0].questionFormatting);
+    expect(restored.nodes[0].answerFormatting).toEqual(original.nodes[0].answerFormatting);
+    expect(restored.nodes[0].question).toBe(original.nodes[0].question);
+    expect(restored.nodes[0].answer).toBe(original.nodes[0].answer);
+    expect(restored.nodes[0].id).not.toBe(original.nodes[0].id);
+    expect(restored.nodes[1].parentId).toBe(restored.nodes[0].id);
+    expect(restored.nodes[1]).not.toHaveProperty('answerFormatting');
+  });
+
+  it('rejects unsafe colors, mismatched ranges and unknown formatting properties in backups', () => {
+    const invalidFormatting = [
+      [{ start: 0, end: 1, color: 'url(evil)' }],
+      [{ start: 0, end: 1, backgroundColor: 'red;position:fixed' }],
+      [{ start: 0, end: 100_000, bold: true }],
+      [{ start: 0, end: 1, html: '<script>evil</script>' }],
+    ];
+    for (const answerFormatting of invalidFormatting) {
+      expect(() => parseProjectBackup(backup(project => { Object.assign(project.nodes[0], { answerFormatting }); }))).toThrow('글자 서식');
+    }
+  });
+
   it('rejects bad JSON, unsupported versions, and unexpected root fields', () => {
     expect(() => parseProjectBackup('not json')).toThrow('JSON');
     expect(() => parseProjectBackup(JSON.stringify({ schemaVersion: 2, project: {} }))).toThrow('버전');

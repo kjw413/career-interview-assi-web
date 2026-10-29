@@ -1,4 +1,5 @@
 import type { InterviewNode, Project, ResumeData } from '../types';
+import { validateTextFormatting } from './textFormatting';
 
 export const MAX_BACKUP_BYTES = 5 * 1024 * 1024;
 const MAX_NODES = 2_000;
@@ -44,7 +45,7 @@ function validateResume(value: unknown): ResumeData | null {
 
 function validateNode(value: unknown): InterviewNode {
   // Accept the retired field in existing v1 backups, but omit it from new exports.
-  const source = record(value, '질문', ['id', 'parentId', 'anchor', 'question', 'answer', 'interviewer', 'status', 'position']);
+  const source = record(value, '질문', ['id', 'parentId', 'anchor', 'question', 'answer', 'questionFormatting', 'answerFormatting', 'interviewer', 'status', 'position']);
   const status = source.status;
   if (status !== 'draft' && status !== 'ready') invalid('질문의 작성 상태가 올바르지 않습니다.');
   const node: InterviewNode = {
@@ -58,6 +59,13 @@ function validateNode(value: unknown): InterviewNode {
   if (source.position !== undefined) {
     const position = record(source.position, '질문 위치', ['x', 'y']);
     node.position = { x: finiteNumber(position.x, '질문 가로 위치'), y: finiteNumber(position.y, '질문 세로 위치') };
+  }
+  for (const field of ['question', 'answer'] as const) {
+    const key = `${field}Formatting` as const;
+    if (source[key] !== undefined) {
+      try { node[key] = validateTextFormatting(source[key], node[field]); }
+      catch (error) { invalid(error instanceof Error ? error.message : '글자 서식 정보를 확인해 주세요.'); }
+    }
   }
   return node;
 }

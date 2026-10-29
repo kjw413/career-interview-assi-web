@@ -5,6 +5,15 @@ export interface ResumeData {
   usedOcr: boolean;
 }
 
+/** Inline styles use UTF-16 offsets into the matching plain question or answer. */
+export interface TextFormatting {
+  start: number;
+  end: number;
+  bold?: true;
+  color?: string;
+  backgroundColor?: string;
+}
+
 export interface InterviewNode {
   id: string;
   parentId: string | null;
@@ -12,6 +21,8 @@ export interface InterviewNode {
   anchor: string;
   question: string;
   answer: string;
+  questionFormatting?: TextFormatting[];
+  answerFormatting?: TextFormatting[];
   status: 'draft' | 'ready';
   position?: { x: number; y: number };
 }

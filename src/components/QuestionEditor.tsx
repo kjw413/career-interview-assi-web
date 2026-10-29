@@ -1,6 +1,8 @@
-import { useEffect, useState, type SyntheticEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowUp, Check, CheckCheck, ChevronRight, CornerDownRight, GitBranch, Link2, MessageSquareText, Quote, Trash2, X } from 'lucide-react';
-import type { InterviewNode } from '../types';
+import type { InterviewNode, TextFormatting } from '../types';
+import RichTextField from './RichTextField';
+import FormattedText from './FormattedText';
 import './editor.css';
 
 interface QuestionEditorProps {
@@ -25,14 +27,9 @@ export default function QuestionEditor({ node, parent, questionLabel, parentLabe
 
   useEffect(() => { setSelection(''); }, [node.id]);
 
-  function captureSelection(event: SyntheticEvent<HTMLTextAreaElement>) {
-    const field = event.currentTarget;
-    setSelection(field.value.slice(field.selectionStart, field.selectionEnd).trim());
-  }
-
-  function updateText(field: 'question' | 'answer', value: string) {
+  function updateText(field: 'question' | 'answer', value: string, formatting: TextFormatting[]) {
     if (field === 'answer') setSelection('');
-    onChange({ [field]: value, ...(!value.trim() && node.status === 'ready' ? { status: 'draft' as const } : {}) });
+    onChange({ [field]: value, [`${field}Formatting`]: formatting, ...(!value.trim() && node.status === 'ready' ? { status: 'draft' as const } : {}) });
   }
 
   return (
@@ -62,19 +59,19 @@ export default function QuestionEditor({ node, parent, questionLabel, parentLabe
       <div className="editor-body">
         <div className="editor-origin">
           <div className="editor-origin-breadcrumb"><Link2 size={13} /><span>{parent ? '이전 답변' : '이력서'}</span><ChevronRight size={12} /><span>이 질문</span></div>
-          {parent && <p className="editor-parent-question" title={parent.question}><Quote size={12} />{parent.question || '아직 작성하지 않은 질문'}</p>}
+          {parent && <p className="editor-parent-question" title={parent.question}><Quote size={12} /><span><FormattedText text={parent.question || '아직 작성하지 않은 질문'} formatting={parent.questionFormatting} /></span></p>}
           <label className="editor-field-label editor-anchor-label" htmlFor="editor-anchor">연결된 키워드</label>
           <input id="editor-anchor" className="editor-anchor-input" value={node.anchor} onChange={event => onChange({ anchor: event.target.value })} placeholder="질문의 출발점이 되는 표현" />
         </div>
 
         <div className="editor-field">
           <label className="editor-field-label" htmlFor="editor-question"><span className="editor-label-icon"><MessageSquareText size={14} />예상 질문</span><span className="editor-field-number" aria-hidden="true">01</span></label>
-          <textarea id="editor-question" autoFocus={variant === 'dialog'} aria-label="예상 질문" className="editor-textarea editor-question" value={node.question} onChange={event => updateText('question', event.target.value)} placeholder="면접관이라면 어떤 질문을 할까요?" rows={3} />
+          <RichTextField id="editor-question" autoFocus={variant === 'dialog'} label="예상 질문" className="editor-question" text={node.question} formatting={node.questionFormatting} onChange={(text, formatting) => updateText('question', text, formatting)} placeholder="면접관이라면 어떤 질문을 할까요?" />
         </div>
 
         <div className="editor-field editor-answer-field">
           <label className="editor-field-label" htmlFor="editor-answer"><span>나의 답변</span><span className="editor-field-number" aria-hidden="true">02</span></label>
-          <textarea id="editor-answer" aria-label="나의 답변" aria-describedby="editor-answer-count" className="editor-textarea editor-answer" value={node.answer} onChange={event => updateText('answer', event.target.value)} onSelect={captureSelection} placeholder={'경험과 생각을 나만의 언어로 정리해 보세요.\n\n답변의 표현을 드래그하면 꼬리질문을 연결할 수 있어요.'} rows={8} />
+          <RichTextField id="editor-answer" label="나의 답변" className="editor-answer" describedBy="editor-answer-count" text={node.answer} formatting={node.answerFormatting} onChange={(text, formatting) => updateText('answer', text, formatting)} onSelectionChange={setSelection} placeholder={'경험과 생각을 나만의 언어로 정리해 보세요.\n\n답변의 표현을 드래그하면 꼬리질문을 연결할 수 있어요.'} />
           <div id="editor-answer-count" className="editor-answer-count">
             <span>공백 포함 <strong>{answerLength.toLocaleString('ko-KR')}</strong>자</span>
             <span>공백 제외 <strong>{answerLengthWithoutSpaces.toLocaleString('ko-KR')}</strong>자</span>

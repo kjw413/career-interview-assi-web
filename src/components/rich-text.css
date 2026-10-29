@@ -1,0 +1,19 @@
+.rich-text-field{display:flex;flex-direction:column;min-width:0}
+.rich-text-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:6px;border:1px solid #e1e7dd;border-bottom:0;border-radius:9px 9px 0 0;background:#f5f8f1;flex-shrink:0}
+.rich-text-tool{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:34px;min-width:34px;padding:5px 7px;border:1px solid transparent;border-radius:5px;color:#456247;font-size:14px;background:transparent;cursor:pointer}
+.rich-text-tool:hover,.rich-text-tool[aria-expanded=true]{background:#e6efdf;border-color:#d1dfc7}
+.rich-text-tool[aria-pressed=true]{color:#214e36;background:#dcebd1;border-color:#b4c9a3}
+.rich-text-content{display:flex;flex-direction:column;flex:1;min-width:0}
+.rich-text-field .rich-text-input{position:relative;flex:1;border-radius:0 0 9px 9px;resize:none;white-space:pre-wrap;overflow-wrap:anywhere;outline:0;font-weight:400}
+.rich-text-input>p{margin:0;min-height:1.9em}
+.rich-text-input strong{font-weight:750}
+.rich-text-input span[style*=background-color]{border-radius:2px}
+.rich-text-field[data-empty=true] .rich-text-input::before{content:attr(data-placeholder);position:absolute;left:13px;right:13px;top:12px;color:#8e9b88;pointer-events:none;font-weight:400;white-space:pre-wrap;font-size:14px;line-height:1.9}
+.rich-text-palette{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;gap:5px;padding:7px 1px 2px;border-top:1px solid #dfe7d7}
+.rich-text-swatch{display:flex;align-items:center;justify-content:flex-start;gap:6px;min-height:36px;padding:5px;border:1px solid #dce5d3;border-radius:5px;background:white;color:#3c553d;font-size:14px;cursor:pointer;white-space:nowrap}
+.rich-text-swatch:hover{border-color:#7b9f68;background:#edf5e7}
+.rich-text-swatch-color{display:block;width:16px;height:16px;border:1px solid #344a3d25;border-radius:3px;flex-shrink:0}
+.rich-text-swatch-reset{grid-column:1 / -1;justify-content:center}
+.editor-panel-dialog .editor-field>.rich-text-field{flex:1}
+.editor-panel-dialog .rich-text-field[data-empty=true] .rich-text-input::before{top:16px;left:16px;right:16px;font-size:16px}
+@media(max-width:760px){.rich-text-tool{min-height:38px}.rich-text-toolbar{gap:3px;padding:5px}.rich-text-tool{padding-left:6px;padding-right:6px}.rich-text-swatch{min-height:40px}}
