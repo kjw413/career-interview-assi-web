@@ -126,9 +126,9 @@ function QuestionFlowEdge(props: EdgeProps) {
   let path: string;
   if (sameRow && props.targetX - props.sourceX > 350) {
     const lane = typeof props.data?.lane === 'number' ? props.data.lane : 0;
-    const laneY = source.position.y - 40 - (lane % 3) * 12;
-    const startX = props.sourceX + 24;
-    const endX = props.targetX - 24;
+    const laneY = source.position.y - 20 - (lane % 3) * 6;
+    const startX = props.sourceX + 12;
+    const endX = props.targetX - 12;
     path = `M ${props.sourceX},${props.sourceY} H ${startX} V ${laneY} H ${endX} V ${props.targetY} H ${props.targetX}`;
   } else {
     [path] = getBezierPath(props);

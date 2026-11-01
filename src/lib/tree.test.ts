@@ -121,7 +121,7 @@ describe('interview tree', () => {
     const positions = layoutQuestionRows(nodes);
     const firstRow = ['first', 'left', 'deep', 'right'];
     expect(firstRow.map(id => positions[id].y)).toEqual([0, 0, 0, 0]);
-    expect(firstRow.map(id => positions[id].x)).toEqual([390, 800, 1210, 1620]);
+    expect(firstRow.map(id => positions[id].x)).toEqual([325, 690, 1055, 1420]);
     expect(positions.second.x).toBe(positions.first.x);
     expect(positions.second.y).toBeGreaterThan(positions.first.y + 400);
     expect(nodes).toEqual(snapshot);
@@ -130,7 +130,7 @@ describe('interview tree', () => {
   it('keeps double-digit group numbers in their numeric question order', () => {
     const nodes = Array.from({ length: 12 }, (_, index) => node(`root-${index + 1}`));
     const positions = layoutQuestionRows(nodes);
-    expect(nodes.map(entry => positions[entry.id].x)).toEqual(Array(12).fill(390));
+    expect(nodes.map(entry => positions[entry.id].x)).toEqual(Array(12).fill(325));
     for (let index = 1; index < nodes.length; index += 1) {
       expect(positions[nodes[index].id].y).toBeGreaterThan(positions[nodes[index - 1].id].y);
     }
@@ -144,12 +144,12 @@ describe('interview tree', () => {
       a: { width: 420, height: 520 }, b: { width: 500, height: 710 },
       c: { width: 340, height: 450 }, d: { width: 320, height: 400 },
     });
-    expect(positions.a.x).toBe(430);
-    expect(positions.b.x).toBe(positions.a.x + 420 + 90);
+    expect(positions.a.x).toBe(365);
+    expect(positions.b.x).toBe(positions.a.x + 420 + 45);
     expect(positions.b.y).toBe(positions.a.y);
     expect(positions.c.x).toBe(positions.a.x);
-    expect(positions.c.y).toBe(positions.a.y + 710 + 120 + 80);
-    expect(positions.d.x).toBe(positions.c.x + 340 + 90);
+    expect(positions.c.y).toBe(positions.a.y + 710 + 60 + 40);
+    expect(positions.d.x).toBe(positions.c.x + 340 + 45);
     const centers = [positions.a.y + 520 / 2, positions.c.y + 450 / 2];
     expect(positions['resume-root']).toEqual({ x: 0, y: (centers[0] + centers[1]) / 2 - 360 / 2 });
   });
@@ -160,7 +160,7 @@ describe('interview tree', () => {
       orphan: { width: Number.NaN, height: -1 }, self: { width: 0, height: Number.POSITIVE_INFINITY },
     });
     expect(Object.keys(positions).sort()).toEqual(['cycle-a', 'cycle-b', 'orphan', 'resume-root', 'self']);
-    expect(positions.orphan).toEqual({ x: 390, y: 0 });
+    expect(positions.orphan).toEqual({ x: 325, y: 0 });
     expect(positions['cycle-a'].y).toBe(positions['cycle-b'].y);
     expect(positions['cycle-b'].x).toBeGreaterThan(positions['cycle-a'].x);
     for (const position of Object.values(positions)) expect(Number.isFinite(position.x) && Number.isFinite(position.y)).toBe(true);

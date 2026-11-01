@@ -210,16 +210,16 @@ export function layoutQuestionRows(
   let nextY = 0;
   const rowCenters: number[] = [];
   for (const row of rows) {
-    let nextX = rootWidth + 130;
+    let nextX = rootWidth + 65;
     let maximumHeight = 0;
     rowCenters.push(nextY + dimension(row[0].node.id, 'height', 400) / 2);
     for (const { node } of row) {
       positions.set(node.id, { x: nextX, y: nextY });
-      nextX += dimension(node.id, 'width', 320) + 90;
+      nextX += dimension(node.id, 'width', 320) + 45;
       maximumHeight = Math.max(maximumHeight, dimension(node.id, 'height', 400));
     }
     // Leave room for connection lanes above the next row as well as a visible card gap.
-    nextY += maximumHeight + 120 + 80;
+    nextY += maximumHeight + 60 + 40;
   }
   positions.set('resume-root', { x: 0, y: (rowCenters[0] + rowCenters[rowCenters.length - 1]) / 2 - rootHeight / 2 });
   return Object.fromEntries(positions);
