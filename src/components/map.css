@@ -12,6 +12,8 @@
 .map-question-card.is-dimmed{opacity:.26}
 .map-card-top{display:flex;align-items:center;gap:7px;margin-bottom:15px;line-height:1}
 .map-question-number{font-size:16px;font-weight:700;letter-spacing:.5px;color:#87948b}
+.map-category-badge{display:inline-flex;align-items:center;padding:4px 6px;border-radius:5px;background:#f0f5ea;color:#597447;font-size:14px;line-height:1.3;white-space:nowrap;font-weight:550}
+.map-category-basic{background:#edf2ff;color:#526eaa}.map-category-fundamentals{background:#fff3e2;color:#916a34}.map-category-resume{background:#edf5e9;color:#5a7b4b}
 .map-status{margin-left:auto;display:inline-flex;align-items:center;gap:3px;font-size:16px;white-space:nowrap;color:#839187}
 .map-status.ready{color:#6a8a70}.map-status.draft{color:#a79c7f}
 .map-status.draft>span{width:5px;height:5px;background:#d3b56c;border-radius:50%;margin-right:2px}
@@ -35,6 +37,7 @@
 .map-resume-dot{width:6px;height:6px;background:#bdcf99;border-radius:50%;margin-left:auto}
 .map-resume-card h3{font-size:20px;line-height:1.6;letter-spacing:-.7px;font-weight:600;margin:21px 0 12px;color:#eff7e9}
 .map-resume-card>p{color:#a6bdaa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;line-height:1.6;margin:0 0 21px}
+.map-resume-card>.map-preparation-description{white-space:normal;overflow-wrap:anywhere}
 .map-resume-stats{display:flex;align-items:center;gap:18px;color:#a7bfae;font-size:16px;padding-bottom:17px;white-space:nowrap}
 .map-resume-stats b{color:#e4efd8;font-size:16px;font-weight:500;margin-left:5px}
 .map-resume-add{display:flex;align-items:center;gap:6px;width:calc(100% + 46px);margin-left:-23px;padding:14px 22px;border:0;border-top:1px solid #ffffff13;background:#ffffff05;color:#dcebcf;border-radius:0 0 14px 14px;cursor:pointer;font-family:inherit;font-size:16px;font-weight:500}

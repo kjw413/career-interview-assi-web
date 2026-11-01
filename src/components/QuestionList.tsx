@@ -3,8 +3,9 @@ import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCenter, 
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { ChevronRight, FileText, GitBranch, GripVertical, Search } from 'lucide-react';
-import type { InterviewNode } from '../types';
+import type { InterviewNode, QuestionCategory, QuestionCategoryFilter } from '../types';
 import type { QuestionOutlineEntry } from '../lib/tree';
+import { QUESTION_CATEGORIES } from '../lib/questionCategories';
 import FormattedText from './FormattedText';
 import './question-list.css';
 
@@ -13,6 +14,8 @@ interface QuestionListProps {
   selectedId: string | null;
   filter: 'all' | InterviewNode['status'];
   search: string;
+  categoryFilter: QuestionCategoryFilter;
+  categoryById: ReadonlyMap<string, QuestionCategory>;
   onSelect: (id: string) => void;
   onReorder: (sourceId: string, targetId: string, placement: 'before' | 'after') => void;
 }
@@ -23,12 +26,13 @@ interface QuestionGroup {
   childCount: number;
 }
 
-function SortableQuestionGroup({ group, byId, selectedId, disabled, disabledReason, onSelect }: {
+function SortableQuestionGroup({ group, byId, selectedId, disabled, disabledReason, categoryById, onSelect }: {
   group: QuestionGroup;
   byId: Map<string, QuestionOutlineEntry>;
   selectedId: string | null;
   disabled: boolean;
   disabledReason: string;
+  categoryById: ReadonlyMap<string, QuestionCategory>;
   onSelect: (id: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: group.root.node.id, disabled });
@@ -51,6 +55,7 @@ function SortableQuestionGroup({ group, byId, selectedId, disabled, disabledReas
               <span>부모 {parent.label}</span><ChevronRight size={13} aria-hidden="true" /><span>{label}</span>
             </span>}
             <span className="list-item-meta"><span>{parent ? <GitBranch size={12} /> : <FileText size={12} />}{node.anchor || '연결 키워드 없음'}</span></span>
+            <span className="question-category-badge">{QUESTION_CATEGORIES.find(category => category.id === (categoryById.get(node.id) ?? 'resume'))?.label}</span>
             <strong>{node.question || '새로운 질문을 작성해 주세요'}</strong>
             <span className="list-answer-preview"><FormattedText text={node.answer || '아직 답변을 작성하지 않았어요.'} formatting={node.answerFormatting} /></span>
           </span>
@@ -62,24 +67,24 @@ function SortableQuestionGroup({ group, byId, selectedId, disabled, disabledReas
   </section>;
 }
 
-export default function QuestionList({ outline, selectedId, filter, search, onSelect, onReorder }: QuestionListProps) {
+export default function QuestionList({ outline, selectedId, filter, search, categoryFilter, categoryById, onSelect, onReorder }: QuestionListProps) {
   const container = useRef<HTMLDivElement>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const byId = new Map(outline.map((entry) => [entry.node.id, entry]));
   const query = search.trim().toLocaleLowerCase();
-  const isFiltered = filter !== 'all' || Boolean(query);
+  const isFiltered = filter !== 'all' || Boolean(query) || categoryFilter !== 'all';
   const groups: QuestionGroup[] = [];
   for (const entry of outline) {
     if (entry.parentId === null) groups.push({ root: entry, entries: [], childCount: 0 });
     const group = groups[groups.length - 1];
     if (entry.parentId !== null) group.childCount += 1;
-    if ((filter === 'all' || entry.node.status === filter)
+    if ((categoryFilter === 'all' || categoryById.get(entry.node.id) === categoryFilter) && (filter === 'all' || entry.node.status === filter)
       && (!query || `${entry.node.anchor} ${entry.node.question} ${entry.node.answer}`.toLocaleLowerCase().includes(query))) group.entries.push(entry);
   }
   const visibleGroups = groups.filter(group => group.entries.length > 0);
   const visibleCount = visibleGroups.reduce((sum, group) => sum + group.entries.length, 0);
   const disabled = isFiltered || groups.length < 2;
-  const disabledReason = isFiltered ? '검색·상태 필터를 해제하면 순서를 바꿀 수 있어요.' : '이동할 다른 질문 묶음이 없어요.';
+  const disabledReason = categoryFilter !== 'all' ? '전체 질문에서 검색·상태 필터를 해제하면 순서를 바꿀 수 있어요.' : isFiltered ? '검색·상태 필터를 해제하면 순서를 바꿀 수 있어요.' : '이동할 다른 질문 묶음이 없어요.';
   const activeGroup = groups.find(group => group.root.node.id === activeId);
   const groupIds = visibleGroups.map(group => group.root.node.id);
   const keyboardTarget = useRef<string | null>(null);
@@ -142,13 +147,13 @@ export default function QuestionList({ outline, selectedId, filter, search, onSe
       }}>
       <SortableContext items={groupIds} strategy={verticalListSortingStrategy}>
         {visibleGroups.map(group => <SortableQuestionGroup key={group.root.node.id} group={group} byId={byId} selectedId={selectedId}
-          disabled={disabled} disabledReason={disabledReason} onSelect={onSelect} />)}
+          disabled={disabled} disabledReason={disabledReason} categoryById={categoryById} onSelect={onSelect} />)}
       </SortableContext>
       <DragOverlay dropAnimation={null}>{activeGroup && <div className="list-drag-overlay">
         <span className="list-drag-overlay-label"><GripVertical size={17} />{activeGroup.root.label}</span>
         <strong>{activeGroup.root.node.question || '새로운 질문'}</strong>
         <span>{activeGroup.childCount ? `연결된 꼬리질문 ${activeGroup.childCount}개와 함께 이동` : '질문 묶음 이동'}</span>
       </div>}</DragOverlay>
-    </DndContext> : <div className="list-empty"><Search size={28} /><h3>{isFiltered ? '일치하는 질문이 없어요' : '첫 질문을 연결해 보세요'}</h3><p>{isFiltered ? '검색어나 상태 필터를 변경해 주세요.' : '이력서의 문구를 선택하면 나만의 질문이 시작돼요.'}</p></div>}
+    </DndContext> : <div className="list-empty"><Search size={28} /><h3>{query || filter !== 'all' ? '일치하는 질문이 없어요' : '첫 질문을 작성해 보세요'}</h3><p>{query || filter !== 'all' ? '검색어나 상태 필터를 변경해 주세요.' : '질문 추가를 눌러 선택한 분야의 질문과 답변을 준비하세요.'}</p></div>}
   </div>;
 }

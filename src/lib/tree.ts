@@ -1,4 +1,4 @@
-import type { InterviewNode, Project } from '../types';
+import type { InterviewNode, Project, QuestionCategory } from '../types';
 
 const COMPANY_COLORS = ['#177a68', '#4784db', '#e58a54', '#9b7ad3', '#cd6c8d'];
 
@@ -17,13 +17,14 @@ export function createProject(company: string, role: string): Project {
   };
 }
 
-export function createNode(parentId: string | null, anchor: string): InterviewNode {
+export function createNode(parentId: string | null, anchor: string, category: QuestionCategory = 'resume'): InterviewNode {
   return {
     id: crypto.randomUUID(),
     parentId,
     anchor: anchor.trim(),
     question: '',
     answer: '',
+    category,
     status: 'draft',
   };
 }

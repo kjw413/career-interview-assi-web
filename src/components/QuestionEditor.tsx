@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowUp, Check, CheckCheck, ChevronRight, CornerDownRight, GitBranch, Link2, MessageSquareText, Quote, Trash2, X } from 'lucide-react';
-import type { AnswerStylePreset, InterviewNode, TextFormatting } from '../types';
+import type { AnswerStylePreset, InterviewNode, QuestionCategory, TextFormatting } from '../types';
+import { QUESTION_CATEGORIES } from '../lib/questionCategories';
 import RichTextField from './RichTextField';
 import './editor.css';
 
@@ -11,6 +12,8 @@ interface QuestionEditorProps {
   questionLabel: string;
   parentLabel?: string;
   childQuestions: Array<{ node: InterviewNode; label: string }>;
+  category: QuestionCategory;
+  onCategoryChange: (category: QuestionCategory) => void;
   stylePresets: AnswerStylePreset[];
   onStylePresetsChange: (presets: AnswerStylePreset[]) => void;
   onNavigate: (id: string) => void;
@@ -20,11 +23,14 @@ interface QuestionEditorProps {
   onDelete: () => void;
 }
 
-export default function QuestionEditor({ node, parent, questionLabel, parentLabel, childQuestions, stylePresets, onStylePresetsChange, onNavigate, onChange, onClose, onAddChild, onDelete, variant = 'panel' }: QuestionEditorProps) {
+export default function QuestionEditor({ node, parent, questionLabel, parentLabel, childQuestions, category, onCategoryChange, stylePresets, onStylePresetsChange, onNavigate, onChange, onClose, onAddChild, onDelete, variant = 'panel' }: QuestionEditorProps) {
   const [selection, setSelection] = useState('');
   const canComplete = Boolean(node.question.trim() && node.answer.trim());
   const answerLength = Array.from(node.answer).length;
   const answerLengthWithoutSpaces = Array.from(node.answer.replace(/\s/gu, '')).length;
+  const categoryInfo = QUESTION_CATEGORIES.find(item => item.id === category)!;
+  const isGeneralRoot = !parent && category !== 'resume';
+  const hasConnectedQuestions = Boolean(parent || childQuestions.length);
 
   useEffect(() => { setSelection(''); }, [node.id]);
 
@@ -59,10 +65,20 @@ export default function QuestionEditor({ node, parent, questionLabel, parentLabe
 
       <div className="editor-body">
         <div className="editor-origin">
-          <div className="editor-origin-breadcrumb"><Link2 size={13} /><span>{parent ? '이전 답변' : '이력서'}</span><ChevronRight size={12} /><span>이 질문</span></div>
+          <div className="editor-category-field">
+            <label className="editor-field-label" htmlFor="editor-category">질문 분류</label>
+            <select id="editor-category" aria-label="질문 분류" value={category}
+              aria-describedby={hasConnectedQuestions ? 'editor-category-hint' : undefined}
+              onChange={event => onCategoryChange(event.target.value as QuestionCategory)}>
+              {QUESTION_CATEGORIES.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+            </select>
+            {hasConnectedQuestions && <p id="editor-category-hint" className="editor-category-hint">분류를 바꾸면 연결된 질문 묶음이 함께 이동해요.</p>}
+          </div>
+          <div className="editor-origin-breadcrumb"><Link2 size={13} /><span>{parent ? '이전 답변' : isGeneralRoot ? categoryInfo.label : '이력서'}</span><ChevronRight size={12} /><span>이 질문</span></div>
           {parent && <p className="editor-parent-question" title={parent.question}><Quote size={12} />{parent.question || '아직 작성하지 않은 질문'}</p>}
-          <label className="editor-field-label editor-anchor-label" htmlFor="editor-anchor">연결된 키워드</label>
-          <input id="editor-anchor" className="editor-anchor-input" value={node.anchor} onChange={event => onChange({ anchor: event.target.value })} placeholder="질문의 출발점이 되는 표현" />
+          <label className="editor-field-label editor-anchor-label" htmlFor="editor-anchor">{isGeneralRoot ? '주제·키워드 (선택)' : '연결된 키워드'}</label>
+          <input id="editor-anchor" className="editor-anchor-input" value={node.anchor} onChange={event => onChange({ anchor: event.target.value })}
+            placeholder={isGeneralRoot ? category === 'basic' ? '예: 지원동기, 이직동기' : '예: PN접합, 다이오드, 직무 핵심 개념' : '질문의 출발점이 되는 표현'} />
         </div>
 
         <div className="editor-field">

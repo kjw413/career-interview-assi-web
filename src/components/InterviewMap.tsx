@@ -5,8 +5,9 @@ import {
   type Node, type NodeProps, type Edge,
 } from '@xyflow/react';
 import { ArrowUpRight, Check, FileText, Focus, GitBranch, Minus, Plus, Quote, ScanLine } from 'lucide-react';
-import type { Project, InterviewNode } from '../types';
+import type { Project, InterviewNode, QuestionCategory, QuestionCategoryFilter } from '../types';
 import { getQuestionOutline, layoutTree } from '../lib/tree';
+import { QUESTION_CATEGORIES } from '../lib/questionCategories';
 import FormattedText from './FormattedText';
 import './map.css';
 
@@ -18,11 +19,14 @@ interface InterviewMapProps {
   onPositionChange: (id: string, position: { x: number; y: number }) => void;
   filter: 'all' | 'draft' | 'ready';
   search: string;
+  categoryFilter: QuestionCategoryFilter;
+  categoryById: ReadonlyMap<string, QuestionCategory>;
 }
 
 type QuestionData = {
   node: InterviewNode;
   label: string;
+  category: QuestionCategory;
   childCount: number;
   active: boolean;
   dimmed: boolean;
@@ -33,13 +37,16 @@ type QuestionFlowNode = Node<QuestionData, 'question'>;
 type ResumeData = {
   project: Project;
   ready: number;
+  count: number;
+  categoryFilter: QuestionCategoryFilter;
   onAdd: InterviewMapProps['onAdd'];
 };
 type ResumeFlowNode = Node<ResumeData, 'resume'>;
 type MapNode = QuestionFlowNode | ResumeFlowNode;
 
 function QuestionCard({ data }: NodeProps<QuestionFlowNode>) {
-  const { node, label, childCount, active, dimmed, onSelect, onAdd } = data;
+  const { node, label, category, childCount, active, dimmed, onSelect, onAdd } = data;
+  const categoryLabel = QUESTION_CATEGORIES.find(item => item.id === category)!.label;
   const [selection, setSelection] = useState('');
   const readSelection = useCallback((element: HTMLParagraphElement) => {
     const selected = window.getSelection();
@@ -59,9 +66,10 @@ function QuestionCard({ data }: NodeProps<QuestionFlowNode>) {
       <Handle type="target" position={Position.Left} className="map-handle" />
       <div className="map-card-top">
         <span className="map-question-number">{label}</span>
+        <span className={`map-category-badge map-category-${category}`}>{categoryLabel}</span>
         <span className={`map-status ${node.status}`} title={node.status === 'ready' ? '준비 완료' : '작성 중'}>{node.status === 'ready' ? <Check size={11} /> : <span />}{node.status === 'ready' ? '준비 완료' : '작성 중'}</span>
       </div>
-      <div className="map-anchor" title={node.anchor}><Quote size={11} /><span>{node.anchor || '연결할 표현을 선택해 주세요'}</span></div>
+      <div className="map-anchor" title={node.anchor}><Quote size={11} /><span>{node.anchor || (category === 'resume' ? '연결할 표현을 선택해 주세요' : '주제·키워드 없이도 작성할 수 있어요')}</span></div>
       <button className="map-question-open nodrag" onClick={(event) => { event.stopPropagation(); onSelect(node.id); }}>{node.question || '어떤 질문을 준비할까요?'}</button>
       <p
         className={`map-answer-preview nodrag nopan${!node.answer ? ' is-empty' : ''}`}
@@ -87,14 +95,19 @@ function QuestionCard({ data }: NodeProps<QuestionFlowNode>) {
 }
 
 function ResumeCard({ data }: NodeProps<ResumeFlowNode>) {
-  const { project, ready, onAdd } = data;
+  const { project, ready, count, categoryFilter, onAdd } = data;
+  const category = QUESTION_CATEGORIES.find(item => item.id === categoryFilter);
+  const title = categoryFilter === 'resume' ? '나의 이력서' : category?.label ?? '나의 면접 준비';
+  const description = categoryFilter === 'resume'
+    ? project.resume?.name || '이력서의 표현에서 질문을 연결해 보세요'
+    : category?.description ?? '질문을 연결해 면접 흐름을 준비하세요';
   return (
     <div className="map-resume-card">
-      <div className="map-resume-label"><span className="map-resume-icon"><FileText size={21} strokeWidth={1.6} /></span><span>MY RESUME</span><span className="map-resume-dot" /></div>
-      <h3>모든 질문의 시작,<br />나의 이력서</h3>
-      <p>{project.resume?.name || '이력서를 업로드해 주세요'}</p>
-      <div className="map-resume-stats"><span>연결된 질문 <b>{project.nodes.length}</b></span><span>준비 완료 <b>{ready}</b></span></div>
-      <button className="map-resume-add nodrag" onClick={() => onAdd(null, '')}><Plus size={14} />첫 질문 연결하기<ArrowUpRight size={14} /></button>
+      <div className="map-resume-label"><span className="map-resume-icon"><FileText size={21} strokeWidth={1.6} /></span><span>{categoryFilter === 'resume' ? 'MY RESUME' : category?.label ?? 'INTERVIEW MAP'}</span><span className="map-resume-dot" /></div>
+      <h3>{title}</h3>
+      <p className={categoryFilter === 'resume' ? undefined : 'map-preparation-description'}>{description}</p>
+      <div className="map-resume-stats"><span>질문 <b>{count}</b></span><span>준비 완료 <b>{ready}</b></span></div>
+      <button className="map-resume-add nodrag" onClick={() => onAdd(null, '')}><Plus size={14} />질문 추가하기<ArrowUpRight size={14} /></button>
       <Handle type="source" position={Position.Right} className="map-handle map-root-handle" />
     </div>
   );
@@ -117,11 +130,14 @@ function MapControls() {
   );
 }
 
-function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, filter, search }: InterviewMapProps) {
+function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, filter, search, categoryFilter, categoryById }: InterviewMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [initialized, setInitialized] = useState(false);
   const { getNode, getViewport, setViewport } = useReactFlow<MapNode>();
-  const positions = useMemo(() => layoutTree(project.nodes), [project.nodes]);
+  const visibleNodes = useMemo(() => project.nodes.filter(node => categoryFilter === 'all'
+    || (categoryById.get(node.id) ?? 'resume') === categoryFilter), [project.nodes, categoryFilter, categoryById]);
+  const visibleIds = useMemo(() => new Set(visibleNodes.map(node => node.id)), [visibleNodes]);
+  const positions = useMemo(() => layoutTree(visibleNodes), [visibleNodes]);
   const labels = useMemo(() => new Map(getQuestionOutline(project.nodes).map((entry) => [entry.node.id, entry.label])), [project.nodes]);
   const positionsRef = useRef(positions);
   positionsRef.current = positions;
@@ -129,21 +145,21 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, fi
     const query = search.trim().toLocaleLowerCase();
     const root: ResumeFlowNode = {
       id: 'resume-root', type: 'resume', position: positions['resume-root'] || { x: 0, y: 0 }, draggable: false,
-      data: { project, ready: project.nodes.filter((node) => node.status === 'ready').length, onAdd },
+      data: { project, count: visibleNodes.length, ready: visibleNodes.filter((node) => node.status === 'ready').length, categoryFilter, onAdd },
     };
-    return [root, ...project.nodes.map((node, index): QuestionFlowNode => ({
+    return [root, ...visibleNodes.map((node, index): QuestionFlowNode => ({
       id: node.id,
       type: 'question',
       position: node.position || positions[node.id] || { x: 390, y: index * 350 },
       selected: node.id === selectedId,
       data: {
-        node, label: labels.get(node.id)!, active: node.id === selectedId,
-        childCount: project.nodes.filter((candidate) => candidate.parentId === node.id).length,
+        node, label: labels.get(node.id)!, category: categoryById.get(node.id) ?? 'resume', active: node.id === selectedId,
+        childCount: visibleNodes.filter((candidate) => candidate.parentId === node.id).length,
         dimmed: (filter !== 'all' && node.status !== filter) || (!!query && !`${node.question} ${node.answer} ${node.anchor}`.toLocaleLowerCase().includes(query)),
         onSelect, onAdd,
       },
     }))];
-  }, [project, positions, labels, selectedId, onSelect, onAdd, filter, search]);
+  }, [project, visibleNodes, positions, labels, selectedId, onSelect, onAdd, filter, search, categoryFilter, categoryById]);
   const [nodes, setNodes, onNodesChange] = useNodesState<MapNode>(initialNodes);
   useEffect(() => { setNodes(initialNodes); }, [initialNodes, setNodes]);
   useEffect(() => {
@@ -163,7 +179,7 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, fi
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, [initialized, setViewport]);
+  }, [initialized, setViewport, categoryFilter]);
   const focusSelected = useCallback(() => {
     if (!selectedId) return;
     const bounds = containerRef.current?.getBoundingClientRect();
@@ -190,10 +206,10 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, fi
     if (containerRef.current) observer.observe(containerRef.current);
     return () => { cancelAnimationFrame(frame); observer.disconnect(); };
   }, [initialized, selectedId, focusSelected]);
-  const edges = useMemo<Edge[]>(() => project.nodes.map((node) => ({
-    id: `edge-${node.id}`, source: node.parentId || 'resume-root', target: node.id,
+  const edges = useMemo<Edge[]>(() => visibleNodes.map((node) => ({
+    id: `edge-${node.id}`, source: node.parentId && visibleIds.has(node.parentId) ? node.parentId : 'resume-root', target: node.id,
     type: 'default', style: edgeStyle,
-  })), [project.nodes]);
+  })), [visibleNodes, visibleIds]);
   return (
     <div className="interview-map" aria-label="면접 질문 마인드맵" ref={containerRef}>
       <ReactFlow<MapNode, Edge>
@@ -209,7 +225,7 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, fi
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.1} color="#d9dfd6" />
         <Panel position="top-left" className="map-canvas-label"><span />생각을 연결하는 공간</Panel>
-        {project.nodes.length === 0 && <Panel position="top-center" className="map-first-hint"><ScanLine size={16} /><span>왼쪽 이력서에서 표현을 선택해 첫 질문을 연결해 보세요.</span></Panel>}
+        {visibleNodes.length === 0 && <Panel position="top-center" className="map-first-hint"><ScanLine size={16} /><span>{categoryFilter === 'resume' ? '이력서의 표현을 선택하거나 질문 추가로 첫 질문을 작성하세요.' : '질문 추가를 눌러 첫 질문을 작성하세요. 이력서 없이도 준비할 수 있어요.'}</span></Panel>}
         <MapControls />
         <Panel position="bottom-right" className="map-legend"><span><i className="ready" />준비 완료</span><span><i className="draft" />작성 중</span></Panel>
       </ReactFlow>

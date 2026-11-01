@@ -23,6 +23,9 @@ export interface AnswerStylePreset {
   backgroundColor?: string;
 }
 
+export type QuestionCategory = 'basic' | 'fundamentals' | 'resume';
+export type QuestionCategoryFilter = 'all' | QuestionCategory;
+
 export interface InterviewNode {
   id: string;
   parentId: string | null;
@@ -30,6 +33,8 @@ export interface InterviewNode {
   anchor: string;
   question: string;
   answer: string;
+  /** Omitted by legacy data; the root question's category applies to its whole flow. */
+  category?: QuestionCategory;
   /** Legacy backup compatibility; questions are displayed and edited as plain text. */
   questionFormatting?: TextFormatting[];
   answerFormatting?: TextFormatting[];

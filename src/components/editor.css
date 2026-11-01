@@ -21,6 +21,10 @@
 .editor-question-nav-title{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:14px;line-height:1.5;color:#344d36}
 .editor-body{padding:22px 23px 25px;overflow-y:auto;flex:1;min-height:0;scrollbar-width:thin;scrollbar-color:#dfe5dc transparent}
 .editor-origin{border:1px solid #e3e9dc;background:#f7f9f2;border-radius:11px;padding:13px 14px 14px;margin-bottom:23px}
+.editor-category-field{padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid #dfe7d8}
+.editor-category-field>.editor-field-label{margin-bottom:7px}
+.editor-category-field select{width:100%;min-width:0;padding:9px 11px;border:1px solid #cfdcc5;border-radius:7px;background:#fff;color:#39543c;font-size:14px;line-height:1.6;cursor:pointer}
+.editor-category-hint{margin:8px 0 0;color:#6e8066;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
 .editor-origin-breadcrumb{display:flex;gap:6px;align-items:center;font-size:14px;color:#7f8c76;line-height:1.4;margin-bottom:12px}
 .editor-origin-breadcrumb svg:first-child{color:#719064}
 .editor-origin-breadcrumb span:last-child{color:#4e6446;font-weight:600}
