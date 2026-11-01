@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   ReactFlow, ReactFlowProvider, Background, BackgroundVariant,
-  Handle, Position, Panel, useNodesState, useReactFlow, useViewport,
-  type Node, type NodeProps, type Edge,
+  BaseEdge, getBezierPath, Handle, Position, Panel, useNodesState, useReactFlow, useViewport,
+  type Node, type NodeProps, type Edge, type EdgeProps,
 } from '@xyflow/react';
-import { ArrowUpRight, Check, FileText, Focus, GitBranch, Minus, Plus, Quote, ScanLine } from 'lucide-react';
+import { ArrowUpRight, Check, FileText, Focus, GitBranch, ListOrdered, Minus, Plus, Quote, ScanLine } from 'lucide-react';
 import type { Project, InterviewNode, QuestionCategory, QuestionCategoryFilter } from '../types';
-import { getQuestionOutline, layoutTree } from '../lib/tree';
+import { getQuestionOutline, layoutQuestionRows, layoutTree } from '../lib/tree';
 import { QUESTION_CATEGORIES } from '../lib/questionCategories';
 import FormattedText from './FormattedText';
 import './map.css';
@@ -17,6 +17,7 @@ interface InterviewMapProps {
   onSelect: (id: string | null) => void;
   onAdd: (parentId: string | null, anchor: string) => void;
   onPositionChange: (id: string, position: { x: number; y: number }) => void;
+  onPositionsChange: (positions: Record<string, { x: number; y: number }>) => void;
   filter: 'all' | 'draft' | 'ready';
   search: string;
   categoryFilter: QuestionCategoryFilter;
@@ -116,7 +117,28 @@ function ResumeCard({ data }: NodeProps<ResumeFlowNode>) {
 const nodeTypes = { question: QuestionCard, resume: ResumeCard };
 const edgeStyle: CSSProperties = { stroke: '#a6beb2', strokeWidth: 1.5 };
 
-function MapControls() {
+/** Route a branching link above a row instead of through the cards it skips. */
+function QuestionFlowEdge(props: EdgeProps) {
+  const { getNode } = useReactFlow<MapNode>();
+  const source = getNode(props.source);
+  const target = getNode(props.target);
+  const sameRow = source && target && Math.abs(source.position.y - target.position.y) < 1;
+  let path: string;
+  if (sameRow && props.targetX - props.sourceX > 350) {
+    const lane = typeof props.data?.lane === 'number' ? props.data.lane : 0;
+    const laneY = source.position.y - 40 - (lane % 3) * 12;
+    const startX = props.sourceX + 24;
+    const endX = props.targetX - 24;
+    path = `M ${props.sourceX},${props.sourceY} H ${startX} V ${laneY} H ${endX} V ${props.targetY} H ${props.targetX}`;
+  } else {
+    [path] = getBezierPath(props);
+  }
+  return <BaseEdge id={props.id} path={path} style={props.style} markerEnd={props.markerEnd} interactionWidth={props.interactionWidth} />;
+}
+
+const edgeTypes = { questionFlow: QuestionFlowEdge };
+
+function MapControls({ onAutoArrange, arrangeDisabled }: { onAutoArrange: () => void; arrangeDisabled: boolean }) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const { zoom } = useViewport();
   return (
@@ -126,14 +148,17 @@ function MapControls() {
       <button onClick={() => zoomIn({ duration: 180 })} aria-label="마인드맵 확대"><Plus size={16} /></button>
       <i />
       <button onClick={() => fitView({ padding: 0.16, duration: 350, maxZoom: 0.9 })} aria-label="마인드맵 전체 보기" title="전체 보기"><Focus size={17} /></button>
+      <i />
+      <button className="map-auto-arrange" onClick={onAutoArrange} disabled={arrangeDisabled} aria-label="마인드맵 자동정렬" title="현재 분야의 질문을 번호순으로 정렬하고 위치 저장"><ListOrdered size={17} /><span>자동정렬</span></button>
     </Panel>
   );
 }
 
-function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, filter, search, categoryFilter, categoryById }: InterviewMapProps) {
+function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, onPositionsChange, filter, search, categoryFilter, categoryById }: InterviewMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [initialized, setInitialized] = useState(false);
-  const { getNode, getViewport, setViewport } = useReactFlow<MapNode>();
+  const { getNode, getNodes, getViewport, setViewport, fitView } = useReactFlow<MapNode>();
+  const autoFitFrame = useRef<number | undefined>(undefined);
   const visibleNodes = useMemo(() => project.nodes.filter(node => categoryFilter === 'all'
     || (categoryById.get(node.id) ?? 'resume') === categoryFilter), [project.nodes, categoryFilter, categoryById]);
   const visibleIds = useMemo(() => new Set(visibleNodes.map(node => node.id)), [visibleNodes]);
@@ -162,6 +187,32 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, fi
   }, [project, visibleNodes, positions, labels, selectedId, onSelect, onAdd, filter, search, categoryFilter, categoryById]);
   const [nodes, setNodes, onNodesChange] = useNodesState<MapNode>(initialNodes);
   useEffect(() => { setNodes(initialNodes); }, [initialNodes, setNodes]);
+  useEffect(() => () => { if (autoFitFrame.current !== undefined) cancelAnimationFrame(autoFitFrame.current); }, [categoryFilter]);
+
+  function autoArrange() {
+    if (!initialized || visibleNodes.length === 0) return;
+    const sizes = Object.fromEntries(getNodes().map(node => [node.id, {
+      width: node.measured?.width ?? (node.id === 'resume-root' ? 260 : 320),
+      height: node.measured?.height ?? (node.id === 'resume-root' ? 320 : 400),
+    }]));
+    const rows = layoutQuestionRows(visibleNodes, sizes);
+    const root = positionsRef.current['resume-root'] ?? { x: 0, y: 0 };
+    const offset = { x: root.x - rows['resume-root'].x, y: root.y - rows['resume-root'].y };
+    const updates: Record<string, { x: number; y: number }> = {};
+    for (const node of visibleNodes) {
+      updates[node.id] = { x: rows[node.id].x + offset.x, y: rows[node.id].y + offset.y };
+    }
+    onSelect(null);
+    setNodes(current => current.map(node => updates[node.id] ? { ...node, position: updates[node.id], selected: false } : { ...node, selected: false }));
+    onPositionsChange(updates);
+    if (autoFitFrame.current !== undefined) cancelAnimationFrame(autoFitFrame.current);
+    autoFitFrame.current = requestAnimationFrame(() => {
+      autoFitFrame.current = requestAnimationFrame(() => {
+        autoFitFrame.current = undefined;
+        void fitView({ padding: 0.16, duration: 350, maxZoom: 0.9 });
+      });
+    });
+  }
   useEffect(() => {
     if (!initialized) return;
     let frame = requestAnimationFrame(() => {
@@ -206,14 +257,14 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, fi
     if (containerRef.current) observer.observe(containerRef.current);
     return () => { cancelAnimationFrame(frame); observer.disconnect(); };
   }, [initialized, selectedId, focusSelected]);
-  const edges = useMemo<Edge[]>(() => visibleNodes.map((node) => ({
+  const edges = useMemo<Edge[]>(() => visibleNodes.map((node, index) => ({
     id: `edge-${node.id}`, source: node.parentId && visibleIds.has(node.parentId) ? node.parentId : 'resume-root', target: node.id,
-    type: 'default', style: edgeStyle,
+    type: node.parentId && visibleIds.has(node.parentId) ? 'questionFlow' : 'default', style: edgeStyle, data: { lane: index },
   })), [visibleNodes, visibleIds]);
   return (
     <div className="interview-map" aria-label="면접 질문 마인드맵" ref={containerRef}>
       <ReactFlow<MapNode, Edge>
-        nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+        nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onNodeDragStop={(_, node) => { if (node.id !== 'resume-root') onPositionChange(node.id, node.position); }}
         onPaneClick={() => onSelect(null)}
@@ -226,7 +277,7 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, fi
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.1} color="#d9dfd6" />
         <Panel position="top-left" className="map-canvas-label"><span />생각을 연결하는 공간</Panel>
         {visibleNodes.length === 0 && <Panel position="top-center" className="map-first-hint"><ScanLine size={16} /><span>{categoryFilter === 'resume' ? '이력서의 표현을 선택하거나 질문 추가로 첫 질문을 작성하세요.' : '질문 추가를 눌러 첫 질문을 작성하세요. 이력서 없이도 준비할 수 있어요.'}</span></Panel>}
-        <MapControls />
+        <MapControls onAutoArrange={autoArrange} arrangeDisabled={!initialized || visibleNodes.length === 0} />
         <Panel position="bottom-right" className="map-legend"><span><i className="ready" />준비 완료</span><span><i className="draft" />작성 중</span></Panel>
       </ReactFlow>
     </div>

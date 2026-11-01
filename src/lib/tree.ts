@@ -187,3 +187,40 @@ export function layoutTree(nodes: InterviewNode[]): Record<string, { x: number; 
   for (const node of nodes) if (!visited.has(node.id)) visit(node.id, 1);
   return positions;
 }
+
+/** One numbered question flow per row, with follow-ups increasing from left to right. */
+export function layoutQuestionRows(
+  nodes: InterviewNode[],
+  sizes: Record<string, { width: number; height: number }> = {},
+): Record<string, { x: number; y: number }> {
+  const dimension = (id: string, key: 'width' | 'height', fallback: number): number => {
+    const value = sizes[id]?.[key];
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+  };
+  const rootWidth = dimension('resume-root', 'width', 260);
+  const rootHeight = dimension('resume-root', 'height', 320);
+  const rows: QuestionOutlineEntry[][] = [];
+  for (const entry of getQuestionOutline(nodes)) {
+    if (entry.parentId === null) rows.push([]);
+    rows[rows.length - 1].push(entry);
+  }
+  if (rows.length === 0) return { 'resume-root': { x: 0, y: 0 } };
+
+  const positions = new Map<string, { x: number; y: number }>();
+  let nextY = 0;
+  const rowCenters: number[] = [];
+  for (const row of rows) {
+    let nextX = rootWidth + 130;
+    let maximumHeight = 0;
+    rowCenters.push(nextY + dimension(row[0].node.id, 'height', 400) / 2);
+    for (const { node } of row) {
+      positions.set(node.id, { x: nextX, y: nextY });
+      nextX += dimension(node.id, 'width', 320) + 90;
+      maximumHeight = Math.max(maximumHeight, dimension(node.id, 'height', 400));
+    }
+    // Leave room for connection lanes above the next row as well as a visible card gap.
+    nextY += maximumHeight + 120 + 80;
+  }
+  positions.set('resume-root', { x: 0, y: (rowCenters[0] + rowCenters[rowCenters.length - 1]) / 2 - rootHeight / 2 });
+  return Object.fromEntries(positions);
+}

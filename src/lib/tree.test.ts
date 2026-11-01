@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { InterviewNode } from '../types';
-import { createNode, createProject, getQuestionOutline, getStats, getSubtreeIds, layoutTree, reorderQuestionBranch } from './tree';
+import { createNode, createProject, getQuestionOutline, getStats, getSubtreeIds, layoutQuestionRows, layoutTree, reorderQuestionBranch } from './tree';
 
 function node(id: string, parentId: string | null = null): InterviewNode {
   return { ...createNode(parentId, `출발 구절 ${id}`), id };
@@ -111,5 +111,59 @@ describe('interview tree', () => {
     expect(layoutTree([])).toEqual({ 'resume-root': { x: 0, y: 0 } });
     expect(layoutTree([node('orphan', 'missing')]).orphan.x).toBe(390);
     expect(getStats([])).toEqual({ total: 0, ready: 0, draft: 0, roots: 0, maxDepth: 0 });
+  });
+
+  it('arranges root flows vertically and all numbered follow-ups horizontally without changing branches or contents', () => {
+    const nodes = [node('deep', 'left'), node('first'), node('second'), node('left', 'first'), node('right', 'first')];
+    nodes[3].answer = '작성한 답변';
+    nodes[3].position = { x: 900, y: -40 };
+    const snapshot = structuredClone(nodes);
+    const positions = layoutQuestionRows(nodes);
+    const firstRow = ['first', 'left', 'deep', 'right'];
+    expect(firstRow.map(id => positions[id].y)).toEqual([0, 0, 0, 0]);
+    expect(firstRow.map(id => positions[id].x)).toEqual([390, 800, 1210, 1620]);
+    expect(positions.second.x).toBe(positions.first.x);
+    expect(positions.second.y).toBeGreaterThan(positions.first.y + 400);
+    expect(nodes).toEqual(snapshot);
+  });
+
+  it('keeps double-digit group numbers in their numeric question order', () => {
+    const nodes = Array.from({ length: 12 }, (_, index) => node(`root-${index + 1}`));
+    const positions = layoutQuestionRows(nodes);
+    expect(nodes.map(entry => positions[entry.id].x)).toEqual(Array(12).fill(390));
+    for (let index = 1; index < nodes.length; index += 1) {
+      expect(positions[nodes[index].id].y).toBeGreaterThan(positions[nodes[index - 1].id].y);
+    }
+    expect(positions['root-10'].y).toBeGreaterThan(positions['root-9'].y);
+  });
+
+  it('uses measured card sizes and reserves connection lanes without overlapping rows', () => {
+    const nodes = [node('a'), node('b', 'a'), node('c'), node('d', 'c')];
+    const positions = layoutQuestionRows(nodes, {
+      'resume-root': { width: 300, height: 360 },
+      a: { width: 420, height: 520 }, b: { width: 500, height: 710 },
+      c: { width: 340, height: 450 }, d: { width: 320, height: 400 },
+    });
+    expect(positions.a.x).toBe(430);
+    expect(positions.b.x).toBe(positions.a.x + 420 + 90);
+    expect(positions.b.y).toBe(positions.a.y);
+    expect(positions.c.x).toBe(positions.a.x);
+    expect(positions.c.y).toBe(positions.a.y + 710 + 120 + 80);
+    expect(positions.d.x).toBe(positions.c.x + 340 + 90);
+    const centers = [positions.a.y + 520 / 2, positions.c.y + 450 / 2];
+    expect(positions['resume-root']).toEqual({ x: 0, y: (centers[0] + centers[1]) / 2 - 360 / 2 });
+  });
+
+  it('keeps orphaned and cyclic rows finite and uses safe fallbacks for missing measurements', () => {
+    const nodes = [node('cycle-a', 'cycle-b'), node('orphan', 'missing'), node('cycle-b', 'cycle-a'), node('self', 'self')];
+    const positions = layoutQuestionRows(nodes, {
+      orphan: { width: Number.NaN, height: -1 }, self: { width: 0, height: Number.POSITIVE_INFINITY },
+    });
+    expect(Object.keys(positions).sort()).toEqual(['cycle-a', 'cycle-b', 'orphan', 'resume-root', 'self']);
+    expect(positions.orphan).toEqual({ x: 390, y: 0 });
+    expect(positions['cycle-a'].y).toBe(positions['cycle-b'].y);
+    expect(positions['cycle-b'].x).toBeGreaterThan(positions['cycle-a'].x);
+    for (const position of Object.values(positions)) expect(Number.isFinite(position.x) && Number.isFinite(position.y)).toBe(true);
+    expect(layoutQuestionRows([])).toEqual({ 'resume-root': { x: 0, y: 0 } });
   });
 });

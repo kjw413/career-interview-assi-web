@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { InterviewNode } from '../src/types';
 
 /** Small, deterministic synthetic resume with embedded text and a valid PDF xref. */
 function resumePdf(): Buffer {
@@ -844,4 +845,86 @@ test('replaces only resume-based questions when uploading a new PDF and retains 
   await expect(page.locator('.question-list-item')).toHaveCount(1);
   await questionCategory(page, '자소서기반');
   await expect(page.locator('.question-list-item')).toHaveCount(0);
+});
+
+test('automatically arranges numbered question flows into horizontal rows and saves the layout without changing preparation content', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const envelope = JSON.parse(await downloadBackup(page));
+  envelope.project.nodes.forEach((node: InterviewNode, index: number) => {
+    node.position = { x: 2000 - index * 190, y: index % 2 ? -400 : 800 };
+  });
+  envelope.project.nodes[0].answerFormatting = [{ start: 0, end: 3, bold: true, backgroundColor: '#fff1a8' }];
+  envelope.project.answerStylePresets = [{ id: 'memorize', name: '암기할 내용', bold: true, backgroundColor: '#fff1a8' }];
+  await page.getByLabel('면접 백업 파일', { exact: true }).setInputFiles({ name: 'scattered-question-map.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(envelope)) });
+  await expect(page.getByRole('navigation', { name: '지원서 목록' }).getByRole('button')).toHaveCount(2);
+  await saved(page);
+  const before = JSON.parse(await downloadBackup(page)).project;
+  await page.getByRole('button', { name: '작업 영역 전체화면', exact: true }).click();
+  const arrange = page.getByRole('button', { name: '마인드맵 자동정렬', exact: true });
+  await expect(arrange).toBeEnabled();
+  await arrange.click();
+  await saved(page);
+
+  const flowIds = before.nodes.slice(0, 4).map((node: InterviewNode) => node.id) as string[];
+  await expect.poll(async () => {
+    const boxes = await Promise.all(flowIds.map(id => page.locator(`.react-flow__node-question[data-id="${id}"]`).boundingBox()));
+    return boxes.every(box => box && box.width > 0) && boxes.every((box, index) => index === 0 || (Math.abs(box!.y - boxes[0]!.y) < 1 && box!.x > boxes[index - 1]!.x + boxes[index - 1]!.width));
+  }).toBe(true);
+  // The second child still connects to its actual parent, routing around the card in between.
+  await expect(page.locator(`.react-flow__edge[data-id="edge-${flowIds[2]}"] .react-flow__edge-path`)).toHaveAttribute('d', /V/u);
+  await page.getByRole('button', { name: '작업 영역 전체화면 종료', exact: true }).click();
+  const after = JSON.parse(await downloadBackup(page)).project;
+  const nodes = after.nodes as InterviewNode[];
+  const positions = nodes.map(node => node.position!);
+  expect(positions.every(position => Number.isFinite(position.x) && Number.isFinite(position.y))).toBe(true);
+  expect(positions.slice(0, 4).every(position => position.y === positions[0].y)).toBe(true);
+  expect(positions[1].x).toBeGreaterThan(positions[0].x);
+  expect(positions[2].x).toBeGreaterThan(positions[1].x);
+  expect(positions[3].x).toBeGreaterThan(positions[2].x);
+  expect(positions[4].x).toBe(positions[0].x);
+  expect(positions[5].x).toBe(positions[0].x);
+  expect(positions[4].y).toBeGreaterThan(positions[0].y);
+  expect(positions[5].y).toBeGreaterThan(positions[4].y);
+  const withoutPositions = (entries: InterviewNode[]) => entries.map(({ position: _position, ...node }) => node);
+  expect(withoutPositions(nodes)).toEqual(withoutPositions(before.nodes));
+  expect(after.answerStylePresets).toEqual(before.answerStylePresets);
+  await page.reload();
+  await expect(page.locator('.react-flow__node-question')).toHaveCount(6);
+  const restored = JSON.parse(await downloadBackup(page)).project;
+  expect(restored.nodes.map((node: InterviewNode) => node.position)).toEqual(positions);
+});
+
+test('automatically arranges only the current question category and keeps the empty mobile control available', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const envelope = JSON.parse(await downloadBackup(page));
+  envelope.project.nodes.forEach((node: InterviewNode, index: number) => {
+    node.category = index < 4 ? 'basic' : index === 4 ? 'fundamentals' : 'resume';
+    node.position = { x: 900 + index * 87, y: 600 - index * 120 };
+  });
+  await page.getByLabel('면접 백업 파일', { exact: true }).setInputFiles({ name: 'scattered-category-map.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(envelope)) });
+  await expect(page.getByRole('navigation', { name: '지원서 목록' }).getByRole('button')).toHaveCount(2);
+  await saved(page);
+  const before = JSON.parse(await downloadBackup(page)).project;
+  await questionCategory(page, '기본질문');
+  await expect(page.locator('.react-flow__node-question')).toHaveCount(4);
+  await page.getByRole('button', { name: '작업 영역 전체화면', exact: true }).click();
+  await page.getByRole('button', { name: '마인드맵 자동정렬', exact: true }).click();
+  await saved(page);
+  await page.getByRole('button', { name: '작업 영역 전체화면 종료', exact: true }).click();
+  const after = JSON.parse(await downloadBackup(page)).project;
+  expect(after.nodes.slice(4)).toEqual(before.nodes.slice(4));
+  expect(after.nodes.slice(0, 4).map((node: InterviewNode) => node.position)).not.toEqual(before.nodes.slice(0, 4).map((node: InterviewNode) => node.position));
+  const basicPositions = after.nodes.slice(0, 4).map((node: InterviewNode) => node.position!);
+  expect(basicPositions.every((position: { x: number; y: number }) => position.y === basicPositions[0].y)).toBe(true);
+  expect(after.nodes.map(({ position: _position, ...node }: InterviewNode) => node)).toEqual(before.nodes.map(({ position: _position, ...node }: InterviewNode) => node));
+
+  await createApplication(page, '빈 면접 준비', '테스트 직무');
+  await questionCategory(page, '기본질문');
+  await page.setViewportSize({ width: 390, height: 844 });
+  const arrange = page.getByRole('button', { name: '마인드맵 자동정렬', exact: true });
+  await expect(arrange).toBeDisabled();
+  await expect(arrange).toBeVisible();
+  const bounds = await arrange.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
 });

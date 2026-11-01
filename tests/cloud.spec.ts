@@ -91,6 +91,53 @@ test('shares cloud projects across two independent browsers and isolates a secon
   await laptop.close();
 });
 
+test('saves automatic map alignment in one batch and restores the same positions in another browser', async ({ browser, page, context }) => {
+  const backend = new Backend();
+  const project = { ...createDemoProject(), id: 'cloud-auto-alignment', company: '자동정렬 공유 기업', isDemo: false };
+  project.nodes = project.nodes.map((node, index) => ({ ...node, position: { x: 2300 - index * 280, y: index % 2 ? -350 : 900 + index * 67 } }));
+  project.nodes[0].answerFormatting = [{ start: 0, end: 3, bold: true }];
+  project.answerStylePresets = [{ id: 'saved-emphasis', name: '핵심', bold: true, color: '#b42318' }];
+  const originalNodes = structuredClone(project.nodes);
+  const key = `${ids['a@example.com']}/${project.id}`;
+  backend.rows.set(key, { id: project.id, user_id: ids['a@example.com'], data: project as unknown as Record<string, unknown>, revision: 1, pdf_path: null });
+  await backend.install(context);
+  await login(page);
+  await expect(page.locator('.react-flow__node-question')).toHaveCount(6);
+  await page.getByRole('button', { name: '마인드맵 자동정렬', exact: true }).click();
+  await expect.poll(() => backend.rows.get(key)?.revision).toBe(2);
+  await expect(page.getByText('모든 변경사항 저장됨', { exact: true })).toBeVisible();
+  const saved = backend.rows.get(key)!;
+  expect(saved.revision).toBe(2);
+  const nodes = saved.data.nodes as typeof project.nodes;
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  const first = byId.get('demo-q1')!.position!;
+  for (const id of ['demo-q2', 'demo-q3', 'demo-q4']) expect(byId.get(id)!.position!.y).toBe(first.y);
+  const firstRow = ['demo-q1', 'demo-q2', 'demo-q3', 'demo-q4'].map(id => byId.get(id)!.position!);
+  for (let index = 1; index < firstRow.length; index += 1) expect(firstRow[index].x).toBeGreaterThan(firstRow[index - 1].x);
+  expect(byId.get('demo-q5')!.position!.x).toBe(first.x);
+  expect(byId.get('demo-q6')!.position!.x).toBe(first.x);
+  expect(byId.get('demo-q5')!.position!.y).toBeGreaterThan(first.y);
+  expect(byId.get('demo-q6')!.position!.y).toBeGreaterThan(byId.get('demo-q5')!.position!.y);
+  expect(nodes.map(({ position: _position, ...node }) => node)).toEqual(originalNodes.map(({ position: _position, ...node }) => node));
+  expect(saved.data.answerStylePresets).toEqual(project.answerStylePresets);
+
+  const laptop = await browser.newContext({ baseURL: 'http://127.0.0.1:5174' });
+  try {
+    await backend.install(laptop);
+    const second = await laptop.newPage();
+    await login(second);
+    await expect(second.locator('.react-flow__node-question')).toHaveCount(6);
+    for (const node of nodes) {
+      const card = second.locator(`.react-flow__node-question[data-id="${node.id}"]`);
+      await expect.poll(() => card.evaluate(element => {
+        const transform = new DOMMatrixReadOnly((element as HTMLElement).style.transform);
+        return { x: transform.m41, y: transform.m42 };
+      })).toEqual(node.position);
+    }
+    expect(backend.rows.get(key)!.revision).toBe(2);
+  } finally { await laptop.close(); }
+});
+
 test('syncs whole-flow question categories across browsers and treats unclassified questions as resume based', async ({ browser, page, context }) => {
   const backend = new Backend();
   const project = { ...createDemoProject(), id: 'cloud-question-categories', company: '분류 공유 기업', isDemo: false };

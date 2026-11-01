@@ -48,6 +48,8 @@
 .map-controls{display:flex;align-items:center;height:40px;border:1px solid #e1e7dd;background:#fff;border-radius:9px;padding:2px 5px;box-shadow:0 3px 10px #273b2d05;margin:20px!important}
 .map-controls button{height:30px;width:30px;display:grid;place-items:center;border:0;border-radius:5px;background:transparent;color:#7f8a7e;cursor:pointer}
 .map-controls button:hover{background:#f1f5ec;color:#315e43}
+.map-controls .map-auto-arrange{display:flex;align-items:center;gap:5px;width:auto;padding:0 8px;font-size:14px;font-weight:550;white-space:nowrap;color:#42634a}
+.map-controls .map-auto-arrange:disabled{opacity:.45;cursor:default}
 .map-controls>span{font-size:14px;font-weight:500;color:#64715f;min-width:49px;text-align:center;font-variant-numeric:tabular-nums}
 .map-controls small{font-size:12px;padding-left:1px;color:#96a18f}
 .map-controls>i{height:15px;border-left:1px solid #e6eade;margin:0 5px}
