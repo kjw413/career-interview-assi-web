@@ -72,7 +72,7 @@ describe('project backups', () => {
   it('preserves categories alongside formatting and treats old backups as resume-based questions', () => {
     const original = createDemoProject();
     original.nodes[0].category = 'basic';
-    original.nodes[1].category = 'basic';
+    original.nodes[1].category = 'situational';
     original.nodes[4].category = 'fundamentals';
     original.nodes[5].category = 'situational';
     original.nodes[0].answerFormatting = [{ start: 0, end: 3, bold: true }];
@@ -81,7 +81,7 @@ describe('project backups', () => {
     expect(restored.nodes.map(entry => entry.category)).toEqual(original.nodes.map(entry => entry.category));
     expect(restored.nodes[0].answerFormatting).toEqual(original.nodes[0].answerFormatting);
     expect(restored.answerStylePresets).toEqual(original.answerStylePresets);
-    expect([...getQuestionCategories(restored.nodes).values()]).toEqual(['basic', 'basic', 'basic', 'basic', 'fundamentals', 'situational']);
+    expect([...getQuestionCategories(restored.nodes).values()]).toEqual(['basic', 'situational', 'basic', 'basic', 'fundamentals', 'situational']);
     const legacy = parseProjectBackup(backup());
     expect(legacy.nodes.every(entry => entry.category === undefined)).toBe(true);
     expect([...getQuestionCategories(legacy.nodes).values()]).toEqual(Array(6).fill('resume'));

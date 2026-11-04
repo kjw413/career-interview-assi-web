@@ -17,6 +17,7 @@ interface QuestionListProps {
   categoryFilter: QuestionCategoryFilter;
   categoryById: ReadonlyMap<string, QuestionCategory>;
   onSelect: (id: string) => void;
+  onNavigate: (id: string) => void;
   onReorder: (sourceId: string, targetId: string, placement: 'before' | 'after') => void;
 }
 
@@ -26,7 +27,7 @@ interface QuestionGroup {
   childCount: number;
 }
 
-function SortableQuestionGroup({ group, byId, selectedId, disabled, disabledReason, categoryById, onSelect }: {
+function SortableQuestionGroup({ group, byId, selectedId, disabled, disabledReason, categoryById, onSelect, onNavigate }: {
   group: QuestionGroup;
   byId: Map<string, QuestionOutlineEntry>;
   selectedId: string | null;
@@ -34,6 +35,7 @@ function SortableQuestionGroup({ group, byId, selectedId, disabled, disabledReas
   disabledReason: string;
   categoryById: ReadonlyMap<string, QuestionCategory>;
   onSelect: (id: string) => void;
+  onNavigate: (id: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: group.root.node.id, disabled });
   const groupNumber = group.root.label.split('-')[0];
@@ -42,6 +44,7 @@ function SortableQuestionGroup({ group, byId, selectedId, disabled, disabledReas
     aria-label={`질문 묶음 ${groupNumber}`}>
     {group.entries.map(({ node, label, parentId, depth }, index) => {
       const parent = parentId ? byId.get(parentId) : undefined;
+      const parentCategory = parent ? QUESTION_CATEGORIES.find(category => category.id === (categoryById.get(parent.node.id) ?? 'resume'))?.label : undefined;
       return <div key={node.id} data-question-id={node.id} style={{ paddingLeft: `${15 + Math.min(depth, 3) * 12}px` }}
         className={`question-list-item${selectedId === node.id ? ' selected' : ''}${index === 0 ? ' list-group-start' : ''}${parent ? ' list-follow-up' : ''}`}>
         {parentId === null ? <button ref={setActivatorNodeRef} type="button" className="list-drag-handle" disabled={disabled}
@@ -49,25 +52,29 @@ function SortableQuestionGroup({ group, byId, selectedId, disabled, disabledReas
           title={disabled ? disabledReason : '드래그하여 묶음 이동 · 스페이스로 잡고 방향키로 이동'} onClick={event => event.stopPropagation()}>
           <GripVertical size={17} aria-hidden="true" /><span className="list-number">{label}</span>
         </button> : <span className="list-number" title="연결된 질문의 순서는 고정돼요.">{label}</span>}
-        <button type="button" className="list-question-open" onClick={() => onSelect(node.id)}>
-          <span className="list-question-copy">
-            {parent && <span className="list-question-path" aria-label={`연결 흐름 ${parent.label} → ${label}`}>
-              <span>부모 {parent.label}</span><ChevronRight size={13} aria-hidden="true" /><span>{label}</span>
-            </span>}
-            <span className="list-item-meta"><span>{parent ? <GitBranch size={12} /> : <FileText size={12} />}{node.anchor || '연결 키워드 없음'}</span></span>
-            <span className="question-category-badge">{QUESTION_CATEGORIES.find(category => category.id === (categoryById.get(node.id) ?? 'resume'))?.label}</span>
-            <strong>{node.question || '새로운 질문을 작성해 주세요'}</strong>
-            <span className="list-answer-preview"><FormattedText text={node.answer || '아직 답변을 작성하지 않았어요.'} formatting={node.answerFormatting} /></span>
-          </span>
-          <span className={`list-status ${node.status}`}><span />{node.status === 'ready' ? '준비 완료' : '작성 중'}</span>
-          <ChevronRight size={17} />
-        </button>
+        <div className="list-question-content">
+          {parent && <div className="list-question-path" aria-label={`연결 흐름 ${parent.label} → ${label}`}>
+            <button type="button" className="list-parent-link" aria-label={`부모 질문 ${parent.label} · ${parentCategory}로 이동`} onClick={() => onNavigate(parent.node.id)}>
+              부모 {parent.label} · {parentCategory}
+            </button><ChevronRight size={13} aria-hidden="true" /><span>{label}</span>
+          </div>}
+          <button type="button" className="list-question-open" onClick={() => onSelect(node.id)}>
+            <span className="list-question-copy">
+              <span className="list-item-meta"><span>{parent ? <GitBranch size={12} /> : <FileText size={12} />}{node.anchor || '연결 키워드 없음'}</span></span>
+              <span className="question-category-badge">{QUESTION_CATEGORIES.find(category => category.id === (categoryById.get(node.id) ?? 'resume'))?.label}</span>
+              <strong>{node.question || '새로운 질문을 작성해 주세요'}</strong>
+              <span className="list-answer-preview"><FormattedText text={node.answer || '아직 답변을 작성하지 않았어요.'} formatting={node.answerFormatting} /></span>
+            </span>
+            <span className={`list-status ${node.status}`}><span />{node.status === 'ready' ? '준비 완료' : '작성 중'}</span>
+            <ChevronRight size={17} />
+          </button>
+        </div>
       </div>;
     })}
   </section>;
 }
 
-export default function QuestionList({ outline, selectedId, filter, search, categoryFilter, categoryById, onSelect, onReorder }: QuestionListProps) {
+export default function QuestionList({ outline, selectedId, filter, search, categoryFilter, categoryById, onSelect, onNavigate, onReorder }: QuestionListProps) {
   const container = useRef<HTMLDivElement>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const byId = new Map(outline.map((entry) => [entry.node.id, entry]));
@@ -147,7 +154,7 @@ export default function QuestionList({ outline, selectedId, filter, search, cate
       }}>
       <SortableContext items={groupIds} strategy={verticalListSortingStrategy}>
         {visibleGroups.map(group => <SortableQuestionGroup key={group.root.node.id} group={group} byId={byId} selectedId={selectedId}
-          disabled={disabled} disabledReason={disabledReason} categoryById={categoryById} onSelect={onSelect} />)}
+          disabled={disabled} disabledReason={disabledReason} categoryById={categoryById} onSelect={onSelect} onNavigate={onNavigate} />)}
       </SortableContext>
       <DragOverlay dropAnimation={null}>{activeGroup && <div className="list-drag-overlay">
         <span className="list-drag-overlay-label"><GripVertical size={17} />{activeGroup.root.label}</span>

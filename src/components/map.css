@@ -18,6 +18,10 @@
 .map-status{margin-left:auto;display:inline-flex;align-items:center;gap:3px;font-size:16px;white-space:nowrap;color:#839187}
 .map-status.ready{color:#6a8a70}.map-status.draft{color:#a79c7f}
 .map-status.draft>span{width:5px;height:5px;background:#d3b56c;border-radius:50%;margin-right:2px}
+.map-parent-link{display:flex;align-items:center;gap:5px;max-width:100%;margin:-4px 0 10px;padding:4px 0;border:0;background:transparent;color:#62816f;font:inherit;font-size:14px;line-height:1.5;text-align:left;cursor:pointer}
+.map-parent-link span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.map-parent-link svg{flex-shrink:0}
+.map-parent-link:hover{color:#315e43;text-decoration:underline;text-underline-offset:3px}
+.map-parent-link:focus-visible{outline:2px solid #75a18c;outline-offset:3px;border-radius:3px}
 .map-anchor{display:flex;align-items:center;gap:5px;color:#55826c;font-size:16px;margin-bottom:8px;max-width:100%}
 .map-anchor span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#f0f6ee;border-radius:4px;padding:3px 6px;max-width:100%}
 .map-anchor svg{flex-shrink:0}

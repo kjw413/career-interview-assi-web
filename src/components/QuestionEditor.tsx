@@ -13,6 +13,7 @@ interface QuestionEditorProps {
   parentLabel?: string;
   childQuestions: Array<{ node: InterviewNode; label: string }>;
   category: QuestionCategory;
+  categoryById: ReadonlyMap<string, QuestionCategory>;
   onCategoryChange: (category: QuestionCategory) => void;
   stylePresets: AnswerStylePreset[];
   onStylePresetsChange: (presets: AnswerStylePreset[]) => void;
@@ -23,7 +24,7 @@ interface QuestionEditorProps {
   onDelete: () => void;
 }
 
-export default function QuestionEditor({ node, parent, questionLabel, parentLabel, childQuestions, category, onCategoryChange, stylePresets, onStylePresetsChange, onNavigate, onChange, onClose, onAddChild, onDelete, variant = 'panel' }: QuestionEditorProps) {
+export default function QuestionEditor({ node, parent, questionLabel, parentLabel, childQuestions, category, categoryById, onCategoryChange, stylePresets, onStylePresetsChange, onNavigate, onChange, onClose, onAddChild, onDelete, variant = 'panel' }: QuestionEditorProps) {
   const [selection, setSelection] = useState('');
   const canComplete = Boolean(node.question.trim() && node.answer.trim());
   const answerLength = Array.from(node.answer).length;
@@ -31,6 +32,7 @@ export default function QuestionEditor({ node, parent, questionLabel, parentLabe
   const categoryInfo = QUESTION_CATEGORIES.find(item => item.id === category)!;
   const isGeneralRoot = !parent && category !== 'resume';
   const hasConnectedQuestions = Boolean(parent || childQuestions.length);
+  const categoryLabel = (id: string) => QUESTION_CATEGORIES.find(item => item.id === (categoryById.get(id) ?? 'resume'))!.label;
 
   useEffect(() => { setSelection(''); }, [node.id]);
 
@@ -54,11 +56,11 @@ export default function QuestionEditor({ node, parent, questionLabel, parentLabe
         <div className="editor-question-nav-links">
           {parent && <button type="button" className="editor-question-nav-button" aria-label={`부모 질문${parentLabel ? ` ${parentLabel}` : ''}: ${parent.question || '아직 작성하지 않은 질문'}`} title={parent.question || '아직 작성하지 않은 질문'} onClick={() => onNavigate(parent.id)}>
             <ArrowUp size={17} />
-            <span className="editor-question-nav-copy"><span className="editor-question-nav-meta"><span>부모 질문</span>{parentLabel && <strong>{parentLabel}</strong>}</span><span className="editor-question-nav-title">{parent.question || '아직 작성하지 않은 질문'}</span></span>
+            <span className="editor-question-nav-copy"><span className="editor-question-nav-meta"><span>부모 질문</span>{parentLabel && <strong>{parentLabel}</strong>}<span className="editor-question-nav-category">{categoryLabel(parent.id)}</span></span><span className="editor-question-nav-title">{parent.question || '아직 작성하지 않은 질문'}</span></span>
           </button>}
           {childQuestions.map(({ node: child, label }) => <button type="button" key={child.id} className="editor-question-nav-button" aria-label={`꼬리질문 ${label}: ${child.question || '아직 작성하지 않은 질문'}`} title={child.question || '아직 작성하지 않은 질문'} onClick={() => onNavigate(child.id)}>
             <CornerDownRight size={17} />
-            <span className="editor-question-nav-copy"><span className="editor-question-nav-meta"><span>꼬리질문</span><strong>{label}</strong></span><span className="editor-question-nav-title">{child.question || '아직 작성하지 않은 질문'}</span></span>
+            <span className="editor-question-nav-copy"><span className="editor-question-nav-meta"><span>꼬리질문</span><strong>{label}</strong><span className="editor-question-nav-category">{categoryLabel(child.id)}</span></span><span className="editor-question-nav-title">{child.question || '아직 작성하지 않은 질문'}</span></span>
           </button>)}
         </div>
       </nav>}
@@ -72,7 +74,7 @@ export default function QuestionEditor({ node, parent, questionLabel, parentLabe
               onChange={event => onCategoryChange(event.target.value as QuestionCategory)}>
               {QUESTION_CATEGORIES.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
             </select>
-            {hasConnectedQuestions && <p id="editor-category-hint" className="editor-category-hint">분류를 바꾸면 연결된 질문 묶음이 함께 이동해요.</p>}
+            {hasConnectedQuestions && <p id="editor-category-hint" className="editor-category-hint">이 질문의 분류만 변경돼요. 부모·꼬리질문과의 연결은 유지돼요.</p>}
           </div>
           <div className="editor-origin-breadcrumb"><Link2 size={13} /><span>{parent ? '이전 답변' : isGeneralRoot ? categoryInfo.label : '이력서'}</span><ChevronRight size={12} /><span>이 질문</span></div>
           {parent && <p className="editor-parent-question" title={parent.question}><Quote size={12} />{parent.question || '아직 작성하지 않은 질문'}</p>}

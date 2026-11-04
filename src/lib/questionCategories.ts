@@ -1,5 +1,5 @@
 import type { InterviewNode, QuestionCategory } from '../types';
-import { getQuestionOutline } from './tree';
+import { getQuestionOutline, type QuestionOutlineEntry } from './tree';
 
 export const QUESTION_CATEGORIES = [
   { id: 'basic', label: '필수질문', description: '자기소개, 지원동기, 이직동기, 강약점 등 나에 대한 핵심 내용을 준비하세요.' },
@@ -12,25 +12,64 @@ export function isQuestionCategory(value: unknown): value is QuestionCategory {
   return value === 'basic' || value === 'situational' || value === 'fundamentals' || value === 'resume';
 }
 
-/** Keep complete interview flows in one category, including legacy and damaged trees. */
-export function getQuestionCategories(nodes: InterviewNode[]): Map<string, QuestionCategory> {
+function getOutlineCategories(outline: QuestionOutlineEntry[]): Map<string, QuestionCategory> {
   const categories = new Map<string, QuestionCategory>();
-  let current: QuestionCategory = 'resume';
-  for (const entry of getQuestionOutline(nodes)) {
-    if (entry.parentId === null) current = isQuestionCategory(entry.node.category) ? entry.node.category : 'resume';
-    categories.set(entry.node.id, current);
+  for (const { node, parentId } of outline) {
+    categories.set(node.id, isQuestionCategory(node.category)
+      ? node.category
+      : (parentId === null ? undefined : categories.get(parentId)) ?? 'resume');
   }
   return categories;
 }
 
-/** Changing any question moves its entire root flow without changing links or contents. */
-export function setQuestionBranchCategory(nodes: InterviewNode[], id: string, category: QuestionCategory): InterviewNode[] {
+/** Each question owns its category; only legacy questions inherit their parent's category. */
+export function getQuestionCategories(nodes: InterviewNode[]): Map<string, QuestionCategory> {
+  return getOutlineCategories(getQuestionOutline(nodes));
+}
+
+/** Materialize a legacy category only when a preceding change would reclassify the question. */
+function preserveLegacyCategories(nodes: InterviewNode[], previous: Map<string, QuestionCategory>): InterviewNode[] {
+  const effective = new Map<string, QuestionCategory>();
+  const replacements = new Map<InterviewNode, InterviewNode>();
+  for (const { node, parentId } of getQuestionOutline(nodes)) {
+    const inherited = (parentId === null ? undefined : effective.get(parentId)) ?? 'resume';
+    const category = isQuestionCategory(node.category) ? node.category : previous.get(node.id) ?? inherited;
+    effective.set(node.id, category);
+    if (!isQuestionCategory(node.category) && category !== inherited) replacements.set(node, { ...node, category });
+  }
+  return replacements.size ? nodes.map(node => replacements.get(node) ?? node) : nodes;
+}
+
+/** Change one question while preserving every other question's effective category and links. */
+export function setQuestionCategory(nodes: InterviewNode[], id: string, category: QuestionCategory): InterviewNode[] {
+  if (!isQuestionCategory(category)) return nodes;
+  const selected = nodes.find(node => node.id === id);
+  if (!selected) return nodes;
+  if (selected.category === category) return nodes;
+  const previous = getQuestionCategories(nodes);
+  const changed = nodes.map(node => node === selected ? { ...node, category } : node);
+  return preserveLegacyCategories(changed, previous);
+}
+
+/** Remove one category without deleting differently categorized follow-up questions. */
+export function removeQuestionCategory(nodes: InterviewNode[], category: QuestionCategory): InterviewNode[] {
   if (!isQuestionCategory(category)) return nodes;
   const outline = getQuestionOutline(nodes);
-  const selected = outline.find(entry => entry.node.id === id);
-  if (!selected) return nodes;
-  const rootId = selected.ancestorIds[0] ?? selected.node.id;
-  const flowIds = new Set(outline.filter(entry => (entry.ancestorIds[0] ?? entry.node.id) === rootId).map(entry => entry.node.id));
-  if (nodes.every(node => !flowIds.has(node.id) || node.category === category)) return nodes;
-  return nodes.map(node => flowIds.has(node.id) && node.category !== category ? { ...node, category } : node);
+  const previous = getOutlineCategories(outline);
+  const removed = new Set(outline.filter(entry => previous.get(entry.node.id) === category).map(entry => entry.node.id));
+  if (!removed.size) return nodes;
+  const entries = new Map(outline.map(entry => [entry.node.id, entry]));
+  const retained = nodes.filter(node => !removed.has(node.id)).map(node => {
+    if (node.parentId === null || !removed.has(node.parentId)) return node;
+    const ancestors = entries.get(node.id)?.ancestorIds ?? [];
+    let parentId: string | null = null;
+    for (let index = ancestors.length - 1; index >= 0; index -= 1) {
+      if (!removed.has(ancestors[index])) {
+        parentId = ancestors[index];
+        break;
+      }
+    }
+    return { ...node, parentId };
+  });
+  return preserveLegacyCategories(retained, previous);
 }

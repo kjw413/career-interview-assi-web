@@ -16,7 +16,7 @@ import InterviewMap from './components/InterviewMap';
 import QuestionEditor from './components/QuestionEditor';
 import QuestionList from './components/QuestionList';
 import QuestionCategories from './components/QuestionCategories';
-import { getQuestionCategories, setQuestionBranchCategory } from './lib/questionCategories';
+import { getQuestionCategories, removeQuestionCategory, setQuestionCategory } from './lib/questionCategories';
 
 const EMPTY_PROJECTS: Project[] = [];
 type Confirm = { title: string; description: string; action: () => void; label?: string };
@@ -302,8 +302,7 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
       const resume = { name: file.name, ...result };
       await putResumeFile(projectId, file, resume);
       const current = projectsRef.current.find(project => project.id === projectId);
-      const categories = getQuestionCategories(current?.nodes ?? []);
-      const nodes = current?.resume ? current.nodes.filter(node => categories.get(node.id) !== 'resume') : current?.nodes ?? [];
+      const nodes = current?.resume ? removeQuestionCategory(current.nodes, 'resume') : current?.nodes ?? [];
       updateProject(projectId, { resume, nodes, isDemo: false });
       setSelectedId(null); setResumeOpen(true); setCategoryFilter('resume'); setToast(`${result.pages}페이지의 이력서를 읽었습니다. 문구를 선택해 질문을 만들어 보세요.`);
     } catch (error) { if (!controller.signal.aborted) setToast(error instanceof Error ? error.message : 'PDF를 읽지 못했습니다. 다른 파일을 확인해 주세요.'); }
@@ -313,7 +312,7 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
     if (!file || !active || upload) return;
     const categories = getQuestionCategories(active.nodes);
     if (active.resume && active.nodes.some(node => categories.get(node.id) === 'resume')) {
-      setConfirm({ title: '이력서를 교체할까요?', description: '기존 자소서기반 질문과 답변이 삭제됩니다. 필수질문·상황·가치관·전공기초 질문은 유지됩니다. 필요한 내용은 먼저 백업해 주세요. 새 PDF를 읽는 데 실패하면 기존 내용은 유지됩니다.', label: '교체하기', action: () => { setConfirm(null); void processPdf(file, active.id); } });
+      setConfirm({ title: '이력서를 교체할까요?', description: '기존 자소서기반 질문과 답변이 삭제됩니다. 다른 분류의 질문은 유지되며, 부모가 삭제되면 남은 상위 질문에 연결하거나 독립 질문으로 보존합니다. 필요한 내용은 먼저 백업해 주세요. 새 PDF를 읽는 데 실패하면 기존 내용은 유지됩니다.', label: '교체하기', action: () => { setConfirm(null); void processPdf(file, active.id); } });
     } else void processPdf(file, active.id);
   }
   async function importBackup(file: File | undefined) {
@@ -341,7 +340,7 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
   function switchCategory(category: QuestionCategoryFilter) { setCategoryFilter(category); setSelectedId(null); setSelection(null); }
   function changeQuestionCategory(category: QuestionCategory) {
     if (!active || !selected) return;
-    updateProject(active.id, { nodes: setQuestionBranchCategory(active.nodes, selected.id, category) });
+    updateProject(active.id, { nodes: setQuestionCategory(active.nodes, selected.id, category) });
     if (categoryFilter !== 'all') setCategoryFilter(category);
     setSelection(null);
   }
@@ -375,6 +374,8 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
   }
   function navigateQuestion(id: string) {
     if (!outlineById.has(id)) return;
+    const destinationCategory = categoryById.get(id) ?? 'resume';
+    if (categoryFilter !== 'all' && categoryFilter !== destinationCategory) setCategoryFilter(destinationCategory);
     setSelectedId(id); setSelection(null);
     // Keep the destination visible even when the previous question's filter excludes it.
     setFilter('all'); setSearch('');
@@ -383,7 +384,7 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
   const questionEditor = selected && selectedEntry && <QuestionEditor key={selected.id}
     variant={workspaceExpanded ? 'dialog' : 'panel'} node={selected} parent={selectedParent?.node ?? null}
     questionLabel={selectedEntry.label} parentLabel={selectedParent?.label} childQuestions={childQuestions}
-    category={categoryById.get(selected.id) ?? 'resume'} onCategoryChange={changeQuestionCategory}
+    category={categoryById.get(selected.id) ?? 'resume'} categoryById={categoryById} onCategoryChange={changeQuestionCategory}
     stylePresets={active?.answerStylePresets ?? []} onStylePresetsChange={(answerStylePresets) => { if (active) updateProject(active.id, { answerStylePresets }); }}
     onNavigate={navigateQuestion} onChange={updateNode} onClose={() => setSelectedId(null)}
     onAddChild={(anchor) => addQuestion(selected.id, anchor)} onDelete={deleteBranch} />;
@@ -424,7 +425,7 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
             {showResumePanel && <aside className="resume-panel"><div className="resume-panel-heading"><div><FileText size={16} /><strong>나의 이력서</strong><span className="tiny-badge">{active.resume ? `${active.resume.pages}P` : 'PDF'}</span></div><button className="icon-button" aria-label="이력서 패널 닫기" onClick={() => setResumeOpen(false)}><X size={15} /></button></div>
             {upload?.projectId === active.id ? <div className="upload-progress"><div className="ocr-loader"><FileText size={32} /><span /></div><h3>경험을 읽고 있어요</h3><p>{upload.stage}</p><div className="progress-track"><span style={{ width: `${Math.round(upload.progress * 100)}%` }} /></div><span>{Math.round(upload.progress * 100)}%</span><button className="text-button" onClick={() => { uploadAbort.current?.abort(); setToast('이력서 읽기를 취소했습니다.'); }}>취소</button></div> : active.resume ? <><div className="resume-file"><span className="pdf-icon">PDF</span><span title={active.resume.name}>{active.resume.name}<small>{active.isDemo ? '가상의 예시 이력서' : active.resume.usedOcr ? 'OCR 인식 완료' : '텍스트 인식 완료'}</small></span><button className="icon-button" aria-label="이력서 교체" onClick={() => fileRef.current?.click()} disabled={!!upload}><Upload size={15} /></button></div><div className="resume-tip"><span className="tip-cursor">↖</span><p>궁금한 <strong>단어나 문장을 선택</strong>하면<br />새로운 질문을 연결할 수 있어요.</p></div><div className="resume-scroll" onScroll={() => setSelection(null)}>{resumeEditing ? <div className="resume-correction"><label htmlFor="resume-text-edit">인식한 텍스트 수정</label><textarea id="resume-text-edit" value={resumeDraft} onChange={(e) => setResumeDraft(e.target.value)} /><p>기존 질문의 연결 키워드는 유지됩니다.</p><div><button className="button button-outline" onClick={() => setResumeEditing(false)}>취소</button><button className="button button-primary" disabled={!resumeDraft.trim()} onClick={() => { updateProject(active.id, { resume: { ...active.resume!, text: resumeDraft } }); setResumeEditing(false); }}>수정 저장</button></div></div> : <SelectionText text={active.resume.text} nodes={active.nodes} onSelect={setSelection} />}</div><div className="resume-footer"><button className="text-button" onClick={() => { setResumeDraft(active.resume!.text); setResumeEditing(true); }}>텍스트 수정</button><button className="text-button" onClick={() => void openOriginal()}>원본 저장<ArrowDownToLine size={12} /></button></div></> : <div className="resume-upload" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); receivePdf(e.dataTransfer.files[0]); }}><div className="upload-icon"><Upload size={27} /></div><h3>이력서에서 시작하세요</h3><p>PDF를 끌어다 놓거나<br />아래 버튼으로 업로드해 주세요.</p><button className="button button-primary" onClick={() => fileRef.current?.click()} disabled={!!upload}><Plus size={15} />이력서 업로드</button><button className="text-button upload-manual" onClick={() => { setResumeDraft(''); setManualResumeOpen(true); }}>또는 텍스트로 직접 입력</button><small>PDF · 최대 20MB / 20페이지<br />한국어·영어 OCR 지원</small><div className="upload-privacy"><LockKeyhole size={13} />{isCloud ? 'PDF는 내 계정의 비공개 저장소에 보관돼요.' : '이력서는 이 브라우저 안에만 저장돼요.'}</div></div>}
             </aside>}
-            <div className="map-panel">{view === 'map' ? <InterviewMap project={active} onPositionsChange={applyMapPositions} selectedId={selectedId} onSelect={setSelectedId} onAdd={addQuestion} onPositionChange={(id, position) => updateProject(active.id, { nodes: active.nodes.map((n) => n.id === id ? { ...n, position } : n) })} filter={filter} search={search} categoryFilter={categoryFilter} categoryById={categoryById} /> : <QuestionList outline={questionOutline} selectedId={selectedId} filter={filter} search={search} categoryFilter={categoryFilter} categoryById={categoryById} onSelect={setSelectedId} onReorder={reorderQuestions} />}</div>
+            <div className="map-panel">{view === 'map' ? <InterviewMap project={active} onPositionsChange={applyMapPositions} selectedId={selectedId} onSelect={setSelectedId} onNavigate={navigateQuestion} onAdd={addQuestion} onPositionChange={(id, position) => updateProject(active.id, { nodes: active.nodes.map((n) => n.id === id ? { ...n, position } : n) })} filter={filter} search={search} categoryFilter={categoryFilter} categoryById={categoryById} /> : <QuestionList outline={questionOutline} selectedId={selectedId} filter={filter} search={search} categoryFilter={categoryFilter} categoryById={categoryById} onSelect={setSelectedId} onNavigate={navigateQuestion} onReorder={reorderQuestions} />}</div>
             {questionEditor && (workspaceExpanded ? <Modal title="질문 크게 편집" className="question-modal" showClose={false} initialFocus=".editor-question" onClose={() => setSelectedId(null)}>{questionEditor}</Modal> : questionEditor)}
           </div>
           <div className="workspace-status"><span><span className="status-dot green" />나의 경험이 질문으로, 질문이 자신감으로.</span><span><LockKeyhole size={11} />{isCloud ? '내 계정에 클라우드 저장' : '브라우저에 로컬 저장'}</span></div>

@@ -15,6 +15,7 @@ interface InterviewMapProps {
   project: Project;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  onNavigate: (id: string) => void;
   onAdd: (parentId: string | null, anchor: string) => void;
   onPositionChange: (id: string, position: { x: number; y: number }) => void;
   onPositionsChange: (positions: Record<string, { x: number; y: number }>) => void;
@@ -28,10 +29,12 @@ type QuestionData = {
   node: InterviewNode;
   label: string;
   category: QuestionCategory;
+  parent: { id: string; label: string; category: QuestionCategory } | null;
   childCount: number;
   active: boolean;
   dimmed: boolean;
   onSelect: InterviewMapProps['onSelect'];
+  onNavigate: InterviewMapProps['onNavigate'];
   onAdd: InterviewMapProps['onAdd'];
 };
 type QuestionFlowNode = Node<QuestionData, 'question'>;
@@ -46,8 +49,9 @@ type ResumeFlowNode = Node<ResumeData, 'resume'>;
 type MapNode = QuestionFlowNode | ResumeFlowNode;
 
 function QuestionCard({ data }: NodeProps<QuestionFlowNode>) {
-  const { node, label, category, childCount, active, dimmed, onSelect, onAdd } = data;
+  const { node, label, category, parent, childCount, active, dimmed, onSelect, onNavigate, onAdd } = data;
   const categoryLabel = QUESTION_CATEGORIES.find(item => item.id === category)!.label;
+  const parentCategoryLabel = parent && QUESTION_CATEGORIES.find(item => item.id === parent.category)!.label;
   const [selection, setSelection] = useState('');
   const readSelection = useCallback((element: HTMLParagraphElement) => {
     const selected = window.getSelection();
@@ -70,6 +74,11 @@ function QuestionCard({ data }: NodeProps<QuestionFlowNode>) {
         <span className={`map-category-badge map-category-${category}`}>{categoryLabel}</span>
         <span className={`map-status ${node.status}`} title={node.status === 'ready' ? '준비 완료' : '작성 중'}>{node.status === 'ready' ? <Check size={11} /> : <span />}{node.status === 'ready' ? '준비 완료' : '작성 중'}</span>
       </div>
+      {parent && <button
+        className="map-parent-link nodrag nopan"
+        aria-label={`부모 질문 ${parent.label}로 이동 · ${parentCategoryLabel}`}
+        onClick={(event) => { event.stopPropagation(); onNavigate(parent.id); }}
+      ><GitBranch size={13} /><span>부모 {parent.label} · {parentCategoryLabel}</span><ArrowUpRight size={13} /></button>}
       <div className="map-anchor" title={node.anchor}><Quote size={11} /><span>{node.anchor || (category === 'resume' ? '연결할 표현을 선택해 주세요' : '주제·키워드 없이도 작성할 수 있어요')}</span></div>
       <button className="map-question-open nodrag" onClick={(event) => { event.stopPropagation(); onSelect(node.id); }}>{node.question || '어떤 질문을 준비할까요?'}</button>
       <p
@@ -154,7 +163,7 @@ function MapControls({ onAutoArrange, arrangeDisabled }: { onAutoArrange: () => 
   );
 }
 
-function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, onPositionsChange, filter, search, categoryFilter, categoryById }: InterviewMapProps) {
+function MapContent({ project, selectedId, onSelect, onNavigate, onAdd, onPositionChange, onPositionsChange, filter, search, categoryFilter, categoryById }: InterviewMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [initialized, setInitialized] = useState(false);
   const { getNode, getNodes, getViewport, setViewport, fitView } = useReactFlow<MapNode>();
@@ -164,6 +173,7 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, on
   const visibleIds = useMemo(() => new Set(visibleNodes.map(node => node.id)), [visibleNodes]);
   const positions = useMemo(() => layoutTree(visibleNodes), [visibleNodes]);
   const labels = useMemo(() => new Map(getQuestionOutline(project.nodes).map((entry) => [entry.node.id, entry.label])), [project.nodes]);
+  const allIds = useMemo(() => new Set(project.nodes.map(node => node.id)), [project.nodes]);
   const positionsRef = useRef(positions);
   positionsRef.current = positions;
   const initialNodes = useMemo<MapNode[]>(() => {
@@ -179,12 +189,15 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, on
       selected: node.id === selectedId,
       data: {
         node, label: labels.get(node.id)!, category: categoryById.get(node.id) ?? 'resume', active: node.id === selectedId,
-        childCount: visibleNodes.filter((candidate) => candidate.parentId === node.id).length,
+        parent: node.parentId && allIds.has(node.parentId) ? {
+          id: node.parentId, label: labels.get(node.parentId)!, category: categoryById.get(node.parentId) ?? 'resume',
+        } : null,
+        childCount: project.nodes.filter((candidate) => candidate.parentId === node.id).length,
         dimmed: (filter !== 'all' && node.status !== filter) || (!!query && !`${node.question} ${node.answer} ${node.anchor}`.toLocaleLowerCase().includes(query)),
-        onSelect, onAdd,
+        onSelect, onNavigate, onAdd,
       },
     }))];
-  }, [project, visibleNodes, positions, labels, selectedId, onSelect, onAdd, filter, search, categoryFilter, categoryById]);
+  }, [project, visibleNodes, positions, labels, allIds, selectedId, onSelect, onNavigate, onAdd, filter, search, categoryFilter, categoryById]);
   const [nodes, setNodes, onNodesChange] = useNodesState<MapNode>(initialNodes);
   useEffect(() => { setNodes(initialNodes); }, [initialNodes, setNodes]);
   useEffect(() => () => { if (autoFitFrame.current !== undefined) cancelAnimationFrame(autoFitFrame.current); }, [categoryFilter]);
@@ -257,10 +270,16 @@ function MapContent({ project, selectedId, onSelect, onAdd, onPositionChange, on
     if (containerRef.current) observer.observe(containerRef.current);
     return () => { cancelAnimationFrame(frame); observer.disconnect(); };
   }, [initialized, selectedId, focusSelected]);
-  const edges = useMemo<Edge[]>(() => visibleNodes.map((node, index) => ({
-    id: `edge-${node.id}`, source: node.parentId && visibleIds.has(node.parentId) ? node.parentId : 'resume-root', target: node.id,
-    type: node.parentId && visibleIds.has(node.parentId) ? 'questionFlow' : 'default', style: edgeStyle, data: { lane: index },
-  })), [visibleNodes, visibleIds]);
+  const edges = useMemo<Edge[]>(() => visibleNodes.flatMap((node, index) => {
+    // A parent hidden by the category filter is still the real parent. The
+    // card's parent link provides navigation without inventing a root edge.
+    if (node.parentId && allIds.has(node.parentId) && !visibleIds.has(node.parentId)) return [];
+    const parentVisible = node.parentId !== null && visibleIds.has(node.parentId);
+    return [{
+      id: `edge-${node.id}`, source: parentVisible ? node.parentId! : 'resume-root', target: node.id,
+      type: parentVisible ? 'questionFlow' : 'default', style: edgeStyle, data: { lane: index },
+    }];
+  }), [visibleNodes, visibleIds, allIds]);
   return (
     <div className="interview-map" aria-label="면접 질문 마인드맵" ref={containerRef}>
       <ReactFlow<MapNode, Edge>
