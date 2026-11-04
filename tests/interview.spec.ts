@@ -1068,3 +1068,145 @@ test('creates situational questions and follow-ups without a resume and keeps al
   expect(snapshot.nodes[1].parentId).toBe(snapshot.nodes[0].id);
   expect(await page.evaluate(() => document.body.scrollWidth)).toBeLessThanOrEqual(390);
 });
+
+const PRINT_MARGIN = 10 * 72 / 25.4;
+// Chromium rounds the A4 page box, which shifts the content edge by about 1pt; real overflow is far larger.
+const PRINT_EDGE_TOLERANCE = 2;
+const squash = (text: string) => text.replace(/\s+/gu, '');
+
+/** Reads Chromium's real print output with the app's own PDF.js dependency, keeping positions in points. */
+async function readPrintedPdf(pdf: Buffer) {
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const loading = getDocument({ data: new Uint8Array(pdf), isEvalSupported: false });
+  const pdfDocument = await loading.promise;
+  const pages: { width: number; height: number; items: { text: string; x: number; y: number; width: number }[] }[] = [];
+  for (let number = 1; number <= pdfDocument.numPages; number += 1) {
+    const page = await pdfDocument.getPage(number);
+    const [, , width, height] = page.view;
+    const { items } = await page.getTextContent();
+    pages.push({ width, height, items: items.flatMap(item => 'str' in item && item.str.trim()
+      ? [{ text: item.str, x: item.transform[4], y: item.transform[5], width: item.width }] : []) });
+  }
+  await loading.destroy();
+  return pages;
+}
+
+/** Reading order of the printed text; page counters in the bottom margin are left out so pages join seamlessly. */
+function printedText(pages: Awaited<ReturnType<typeof readPrintedPdf>>): string {
+  // PDF text follows paint order, which places positioned Q/A markers after their lines; sort by line, then x.
+  const line = (y: number) => Math.round(y * 2) / 2;
+  return squash(pages.map(page => page.items.filter(item => item.y > PRINT_MARGIN)
+    .sort((left, right) => line(right.y) - line(left.y) || left.x - right.x)
+    .map(item => item.text).join('')).join(''));
+}
+
+test('prints full answer scripts or only emphasized keywords on A4 and names the PDF after the application', async ({ page }) => {
+  await openQuestion(page, '온보딩에서 어떤 문제를 발견했고, 어떻게 개선했나요?');
+  const toolbar = () => editor(page).getByRole('toolbar', { name: '나의 답변 서식', exact: true });
+  await selectRichText(page, '나의 답변', '사용자 인터뷰');
+  await toolbar().getByRole('button', { name: '굵게', exact: true }).click();
+  await selectRichText(page, '나의 답변', '3단계');
+  await toolbar().getByRole('button', { name: '배경색', exact: true }).click();
+  await toolbar().getByRole('button', { name: '배경색 노랑', exact: true }).click();
+  await saved(page);
+  await closeEditor(page);
+
+  await page.getByRole('button', { name: 'PDF 인쇄', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '질문·답변 인쇄', exact: true });
+  const preview = dialog.getByRole('region', { name: '인쇄 미리보기', exact: true });
+  const items = preview.locator('.print-item');
+  await expect(dialog.getByLabel('출력 분야', { exact: true })).toHaveValue('all');
+  await expect(dialog.getByLabel('준비 상태', { exact: true })).toHaveValue('all');
+  await expect(dialog.getByRole('radio', { name: /^전체 답변/ })).toBeChecked();
+  await expect(preview.getByRole('heading', { name: '면접 답변 스크립트', exact: true })).toBeVisible();
+  await expect(items).toHaveCount(6);
+  await expect(items.first().locator('.print-item-meta')).toContainText('1-1');
+  await expect(items.first().locator('.print-item-answer')).toContainText('사용자 인터뷰와 행동 데이터를 함께 살펴');
+  await expect(items.first().locator('.formatted-keyword', { hasText: '사용자 인터뷰' })).toHaveCSS('font-weight', '750');
+  await expect(items.first().locator('.formatted-keyword', { hasText: '3단계' })).toHaveCSS('background-color', 'rgb(255, 241, 168)');
+  await expect(items.nth(1).locator('.print-item-meta')).toContainText('1-1의 꼬리질문');
+
+  await dialog.getByRole('radio', { name: /^강조 키워드만/ }).check();
+  await expect(preview.getByRole('heading', { name: '면접 키워드 노트', exact: true })).toBeVisible();
+  await expect(items.first().locator('.print-keyword')).toHaveText(['사용자 인터뷰', '3단계']);
+  await expect(items.first().locator('.print-item-answer')).not.toContainText('행동 데이터');
+  await expect(items.nth(1).locator('.print-item-answer')).toContainText('강조 표시한 키워드가 없어요.');
+  await expect(items.nth(3).locator('.print-item-answer')).toContainText('답변을 아직 작성하지 않았어요.');
+  const summary = dialog.getByRole('status');
+  await expect(summary).toContainText('질문 6개를 인쇄해요.');
+  await expect(summary).toContainText('강조 키워드가 없는 답변 3개는 안내 문구로 표시돼요.');
+  await expect(summary).toContainText('답변을 작성하지 않은 질문 2개가 포함돼요.');
+  await dialog.getByRole('checkbox', { name: '강조 키워드가 없는 질문 제외', exact: true }).check();
+  await expect(items).toHaveCount(1);
+  await expect(summary).toContainText('질문 1개를 인쇄해요. 5개는 제외했어요.');
+
+  // The browser print dialog is native, so record what it would receive instead of opening it.
+  await page.evaluate(() => {
+    const record = window as unknown as { printedTitles: string[] };
+    record.printedTitles = [];
+    window.print = () => { record.printedTitles.push(document.title); window.dispatchEvent(new Event('afterprint')); };
+  });
+  await dialog.getByRole('button', { name: 'PDF로 인쇄', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { printedTitles: string[] }).printedTitles)).toEqual(['토스_프론트엔드 개발자_면접키워드']);
+  await expect(page).toHaveTitle('folio — 나를 더 잘 말하는 준비');
+
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('#root')).toBeHidden();
+  await expect(page.locator('.print-root')).toBeVisible();
+  await expect(page.locator('.print-root .print-keyword')).toHaveText(['사용자 인터뷰', '3단계']);
+  // Reset rather than force screen media: page.pdf() honors an explicit screen emulation.
+  await page.emulateMedia({ media: null });
+  const pages = await readPrintedPdf(await page.pdf({ preferCSSPageSize: true }));
+  expect(pages).toHaveLength(1);
+  expect(pages[0].width).toBeCloseTo(595, 0);
+  expect(pages[0].height).toBeCloseTo(842, 0);
+  const text = printedText(pages);
+  expect(text).toContain(squash('면접 키워드 노트'));
+  expect(text).toContain(squash('온보딩에서 어떤 문제를 발견했고, 어떻게 개선했나요?'));
+  expect(text).toContain(squash('사용자 인터뷰 · 3단계'));
+  expect(text).not.toContain(squash('행동 데이터'));
+
+  // Mode and exclusion are remembered; the scope follows the current category tab.
+  await dialog.getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await questionCategory(page, '필수질문');
+  await page.getByRole('button', { name: 'PDF 인쇄', exact: true }).click();
+  await expect(dialog.getByLabel('출력 분야', { exact: true })).toHaveValue('basic');
+  await expect(dialog.getByRole('radio', { name: /^강조 키워드만/ })).toBeChecked();
+  await expect(dialog.getByRole('checkbox', { name: '강조 키워드가 없는 질문 제외', exact: true })).toBeChecked();
+  await expect(preview.getByText('인쇄할 질문이 없어요. 출력 분야나 준비 상태를 바꿔 보세요.', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'PDF로 인쇄', exact: true })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+});
+
+test('prints a long answer across A4 pages inside the narrow margins without cutting any text', async ({ page }) => {
+  const token = `https://example.com/${'long-path-segment-'.repeat(14)}end`;
+  const answer = `${token} ${'인쇄할 때 어떤 줄도 잘리지 않고 다음 쪽으로 자연스럽게 이어져야 합니다. '.repeat(120)}마지막 문장까지 모두 인쇄됩니다.`;
+  await openQuestion(page, '바이브 코딩으로 실제 문제를 해결한 경험을 이야기해 주세요.');
+  await editor(page).getByLabel('나의 답변', { exact: true }).fill(answer);
+  await saved(page);
+  await closeEditor(page);
+  await page.getByRole('button', { name: 'PDF 인쇄', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: '질문·답변 인쇄', exact: true }).getByRole('radio', { name: /^전체 답변/ })).toBeChecked();
+
+  const pages = await readPrintedPdf(await page.pdf({ preferCSSPageSize: true }));
+  expect(pages.length).toBeGreaterThan(1);
+  for (const printed of pages) {
+    expect(printed.width).toBeCloseTo(595, 0);
+    expect(printed.height).toBeCloseTo(842, 0);
+    for (const item of printed.items) {
+      expect(item.x).toBeGreaterThanOrEqual(PRINT_MARGIN - PRINT_EDGE_TOLERANCE);
+      expect(item.x + item.width).toBeLessThanOrEqual(printed.width - PRINT_MARGIN + PRINT_EDGE_TOLERANCE);
+      // Only the page counter belongs in the bottom margin.
+      if (item.y < PRINT_MARGIN) expect(item.text).toMatch(/^[\d\s/]+$/u);
+      else expect(item.y).toBeLessThanOrEqual(printed.height - PRINT_MARGIN);
+    }
+  }
+  const text = printedText(pages);
+  expect(text).toContain(squash(answer));
+  for (const question of ['온보딩에서 어떤 문제를 발견했고, 어떻게 개선했나요?', '사용자 인터뷰는 어떤 방식으로 진행했나요?', '어떤 지표로 개선 효과를 검증했나요?',
+    '테스트 결과에 영향을 줄 수 있는 변수는 어떻게 통제했나요?', '디자인 시스템을 구축하며 팀과 어떻게 협업했나요?', '바이브 코딩으로 실제 문제를 해결한 경험을 이야기해 주세요.']) {
+    expect(text).toContain(squash(question));
+  }
+});
