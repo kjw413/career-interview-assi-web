@@ -11,7 +11,7 @@ interface QuestionCategoriesProps {
 
 export default function QuestionCategories({ value, counts, onChange }: QuestionCategoriesProps) {
   const tabs = useRef<HTMLDivElement>(null);
-  const options = [{ id: 'all' as const, label: '전체 질문', description: '기본질문부터 전공 지식, 이력서 경험까지 함께 준비하세요.' }, ...QUESTION_CATEGORIES];
+  const options = [{ id: 'all' as const, label: '전체 질문', description: '필수질문과 상황·가치관부터 전공 지식, 이력서 경험까지 함께 준비하세요.' }, ...QUESTION_CATEGORIES];
   const selected = options.find(option => option.id === value)!;
   return <div className="question-categories">
     <div ref={tabs} className="question-category-tabs" role="tablist" aria-label="질문 분야">

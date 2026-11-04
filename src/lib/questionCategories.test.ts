@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { InterviewNode } from '../types';
 import { createNode } from './tree';
-import { getQuestionCategories, setQuestionBranchCategory } from './questionCategories';
+import { getQuestionCategories, QUESTION_CATEGORIES, setQuestionBranchCategory } from './questionCategories';
 
 function node(id: string, parentId: string | null = null): InterviewNode {
   return { ...createNode(parentId, id), id };
@@ -11,7 +11,28 @@ describe('question categories', () => {
   it('defaults new questions to resume and accepts explicit categories without requiring a resume document', () => {
     expect(createNode(null, '').category).toBe('resume');
     expect(createNode(null, '', 'basic').category).toBe('basic');
+    expect(createNode(null, '', 'situational').category).toBe('situational');
     expect(createNode('parent', '설명한 개념', 'fundamentals').category).toBe('fundamentals');
+  });
+
+  it('keeps existing basic questions together until the user explicitly moves a flow to situational questions', () => {
+    const nodes = [node('root'), node('child', 'root'), node('required'), node('resume')];
+    nodes[0].category = 'basic';
+    nodes[1].category = 'basic';
+    nodes[2].category = 'basic';
+    nodes[0].question = '갈등 상황에 어떻게 대응하나요?';
+    nodes[1].answer = '판단 기준과 행동을 설명합니다.';
+    nodes[1].answerFormatting = [{ start: 0, end: 5, bold: true }];
+    nodes[1].position = { x: 450, y: 100 };
+    const before = structuredClone(nodes);
+    expect(QUESTION_CATEGORIES.map(category => category.label)).toEqual(['필수질문', '상황·가치관', '전공기초', '자소서기반']);
+    expect([...getQuestionCategories(nodes).values()]).toEqual(['basic', 'basic', 'basic', 'resume']);
+    expect(nodes).toEqual(before);
+    const moved = setQuestionBranchCategory(nodes, 'child', 'situational');
+    expect([...getQuestionCategories(moved).values()]).toEqual(['situational', 'situational', 'basic', 'resume']);
+    expect(moved.map(({ category: _category, ...entry }) => entry)).toEqual(before.map(({ category: _category, ...entry }) => entry));
+    expect(nodes).toEqual(before);
+    expect(setQuestionBranchCategory(moved, 'root', 'situational')).toBe(moved);
   });
 
   it('inherits the root category regardless of creation order or inconsistent child fields', () => {

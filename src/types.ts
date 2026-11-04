@@ -23,7 +23,8 @@ export interface AnswerStylePreset {
   backgroundColor?: string;
 }
 
-export type QuestionCategory = 'basic' | 'fundamentals' | 'resume';
+/** Keep basic as the stored ID for required questions so existing content stays in place. */
+export type QuestionCategory = 'basic' | 'situational' | 'fundamentals' | 'resume';
 export type QuestionCategoryFilter = 'all' | QuestionCategory;
 
 export interface InterviewNode {

@@ -78,7 +78,7 @@ export default function QuestionEditor({ node, parent, questionLabel, parentLabe
           {parent && <p className="editor-parent-question" title={parent.question}><Quote size={12} />{parent.question || '아직 작성하지 않은 질문'}</p>}
           <label className="editor-field-label editor-anchor-label" htmlFor="editor-anchor">{isGeneralRoot ? '주제·키워드 (선택)' : '연결된 키워드'}</label>
           <input id="editor-anchor" className="editor-anchor-input" value={node.anchor} onChange={event => onChange({ anchor: event.target.value })}
-            placeholder={isGeneralRoot ? category === 'basic' ? '예: 지원동기, 이직동기' : '예: PN접합, 다이오드, 직무 핵심 개념' : '질문의 출발점이 되는 표현'} />
+            placeholder={isGeneralRoot ? category === 'basic' ? '예: 지원동기, 이직동기' : category === 'situational' ? '예: 갈등 대응, 우선순위, 판단 기준' : '예: PN접합, 다이오드, 직무 핵심 개념' : '질문의 출발점이 되는 표현'} />
         </div>
 
         <div className="editor-field">

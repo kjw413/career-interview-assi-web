@@ -152,7 +152,7 @@ test('syncs whole-flow question categories across browsers and treats unclassifi
   const categories = page.getByRole('tablist', { name: '질문 분야', exact: true });
   await categories.getByRole('tab', { name: '자소서기반', exact: true }).click();
   await expect(page.locator('.question-list-item')).toHaveCount(6);
-  await categories.getByRole('tab', { name: '기본질문', exact: true }).click();
+  await categories.getByRole('tab', { name: '필수질문', exact: true }).click();
   await expect(page.locator('.question-list-item')).toHaveCount(0);
   await categories.getByRole('tab', { name: '전체 질문', exact: true }).click();
   await page.locator('[data-question-id="demo-q1"] .list-question-open').click();
@@ -173,7 +173,7 @@ test('syncs whole-flow question categories across browsers and treats unclassifi
     await login(second);
     await second.getByRole('tab', { name: '질문 목록', exact: true }).click();
     const secondCategories = second.getByRole('tablist', { name: '질문 분야', exact: true });
-    await secondCategories.getByRole('tab', { name: '기본질문', exact: true }).click();
+    await secondCategories.getByRole('tab', { name: '필수질문', exact: true }).click();
     await expect(second.locator('.question-list-item')).toHaveCount(4);
     await expect(second.locator('.question-list-item').first()).toHaveAttribute('data-question-id', 'demo-q1');
     await secondCategories.getByRole('tab', { name: '자소서기반', exact: true }).click();
@@ -184,6 +184,22 @@ test('syncs whole-flow question categories across browsers and treats unclassifi
     await expect(second.locator('.question-list-item')).toHaveCount(0);
     await secondCategories.getByRole('tab', { name: '전체 질문', exact: true }).click();
     await expect(second.locator('.question-list-item')).toHaveCount(6);
+    await second.locator('[data-question-id="demo-q3"] .list-question-open').click();
+    await second.getByLabel('질문 분류', { exact: true }).selectOption('situational');
+    await expect.poll(() => (backend.rows.get(key)?.data.nodes as typeof project.nodes | undefined)?.map(node => node.category))
+      .toEqual(['situational', 'situational', 'situational', 'situational', undefined, undefined]);
+    await expect(second.getByText('모든 변경사항 저장됨', { exact: true })).toBeVisible();
+    const manuallyClassified = backend.rows.get(key)!;
+    expect((manuallyClassified.data.nodes as typeof project.nodes).map(({ category: _category, ...node }) => node)).toEqual(originalNodes);
+    expect(manuallyClassified.data.answerStylePresets).toEqual(project.answerStylePresets);
+    await second.getByRole('button', { name: '질문 편집 닫기', exact: true }).click();
+    await secondCategories.getByRole('tab', { name: '필수질문', exact: true }).click();
+    await expect(second.locator('.question-list-item')).toHaveCount(0);
+    await secondCategories.getByRole('tab', { name: '상황·가치관', exact: true }).click();
+    await expect(second.locator('.question-list-item')).toHaveCount(4);
+    await page.getByRole('button', { name: '최신 내용 불러오기', exact: true }).click();
+    await categories.getByRole('tab', { name: '상황·가치관', exact: true }).click();
+    await expect(page.locator('.question-list-item')).toHaveCount(4);
   } finally { await laptop.close(); }
 });
 

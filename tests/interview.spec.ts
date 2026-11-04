@@ -729,7 +729,7 @@ test('keeps saved answer styles separate between applications and usable in the 
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
-async function questionCategory(page: Page, label: '전체 질문' | '기본질문' | '전공기초' | '자소서기반') {
+async function questionCategory(page: Page, label: '전체 질문' | '필수질문' | '상황·가치관' | '전공기초' | '자소서기반') {
   await page.getByRole('tablist', { name: '질문 분야', exact: true }).getByRole('tab', { name: label, exact: true }).click();
 }
 
@@ -747,7 +747,7 @@ test('creates basic and technical question flows without a resume and moves a co
   await expect(editor(page).getByLabel('예상 질문', { exact: true })).toHaveValue('직무 경험 중 어떤 성과가 있었나요?');
   await closeEditor(page);
   await questionList(page);
-  await questionCategory(page, '기본질문');
+  await questionCategory(page, '필수질문');
   await expect(page.locator('.question-list-item')).toHaveCount(0);
   await questionCategory(page, '전공기초');
   await expect(page.locator('.question-list-item')).toHaveCount(2);
@@ -770,7 +770,7 @@ test('creates basic and technical question flows without a resume and moves a co
 });
 
 test('defaults legacy questions to resume-based and combines category filters with search while preserving numbering and saved emphasis', async ({ page }) => {
-  await questionCategory(page, '기본질문');
+  await questionCategory(page, '필수질문');
   await expect(page.locator('.react-flow__node-question')).toHaveCount(0);
   await questionCategory(page, '자소서기반');
   await expect(page.locator('.react-flow__node-question')).toHaveCount(6);
@@ -780,7 +780,7 @@ test('defaults legacy questions to resume-based and combines category filters wi
   await saveAnswerPreset(page, '기본 핵심');
   await editor(page).getByLabel('질문 분류', { exact: true }).selectOption('basic');
   await closeEditor(page);
-  await questionCategory(page, '기본질문');
+  await questionCategory(page, '필수질문');
   await expect(page.locator('.question-list-item .list-number')).toHaveText(['1-1', '1-2', '1-3', '1-4']);
   await page.getByLabel('준비 상태 필터', { exact: true }).selectOption('draft');
   await page.getByLabel('질문 검색', { exact: true }).fill('테스트 결과');
@@ -804,7 +804,7 @@ test('defaults legacy questions to resume-based and combines category filters wi
   await expect(editor(page).getByRole('button', { name: '저장한 서식 기본 핵심 적용', exact: true })).toBeVisible();
   await closeEditor(page);
   await page.getByLabel('면접 백업 파일', { exact: true }).setInputFiles({ name: 'question-categories.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
-  await questionCategory(page, '기본질문');
+  await questionCategory(page, '필수질문');
   await page.getByRole('tab', { name: '마인드맵', exact: true }).click();
   await expect(page.locator('.react-flow__node-question')).toHaveCount(4);
   await expect(page.locator('.react-flow__edge')).toHaveCount(4);
@@ -839,7 +839,7 @@ test('replaces only resume-based questions when uploading a new PDF and retains 
   expect(after.answerStylePresets).toEqual(before.answerStylePresets);
   expect(after.resume.name).toBe('updated-resume.pdf');
   await questionList(page);
-  await questionCategory(page, '기본질문');
+  await questionCategory(page, '필수질문');
   await expect(page.locator('.question-list-item')).toHaveCount(4);
   await questionCategory(page, '전공기초');
   await expect(page.locator('.question-list-item')).toHaveCount(1);
@@ -905,7 +905,7 @@ test('automatically arranges only the current question category and keeps the em
   await expect(page.getByRole('navigation', { name: '지원서 목록' }).getByRole('button')).toHaveCount(2);
   await saved(page);
   const before = JSON.parse(await downloadBackup(page)).project;
-  await questionCategory(page, '기본질문');
+  await questionCategory(page, '필수질문');
   await expect(page.locator('.react-flow__node-question')).toHaveCount(4);
   await page.getByRole('button', { name: '작업 영역 전체화면', exact: true }).click();
   await page.getByRole('button', { name: '마인드맵 자동정렬', exact: true }).click();
@@ -919,7 +919,7 @@ test('automatically arranges only the current question category and keeps the em
   expect(after.nodes.map(({ position: _position, ...node }: InterviewNode) => node)).toEqual(before.nodes.map(({ position: _position, ...node }: InterviewNode) => node));
 
   await createApplication(page, '빈 면접 준비', '테스트 직무');
-  await questionCategory(page, '기본질문');
+  await questionCategory(page, '필수질문');
   await page.setViewportSize({ width: 390, height: 844 });
   const arrange = page.getByRole('button', { name: '마인드맵 자동정렬', exact: true });
   await expect(arrange).toBeDisabled();
@@ -927,4 +927,77 @@ test('automatically arranges only the current question category and keeps the em
   const bounds = await arrange.boundingBox();
   expect(bounds!.x).toBeGreaterThanOrEqual(0);
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+});
+
+test('keeps old basic questions under required questions until a user manually reclassifies a complete flow', async ({ page }) => {
+  const fixture = JSON.parse(await downloadBackup(page));
+  fixture.project.nodes.forEach((node: InterviewNode, index: number) => {
+    node.category = index < 5 ? 'basic' : 'resume';
+    node.position = { x: 100 + index * 370, y: 40 + index * 20 };
+  });
+  fixture.project.nodes[0].answerFormatting = [{ start: 0, end: 3, bold: true, backgroundColor: '#fff1a8' }];
+  fixture.project.answerStylePresets = [{ id: 'existing-emphasis', name: '기존 강조', bold: true, backgroundColor: '#fff1a8' }];
+  await page.getByLabel('면접 백업 파일', { exact: true }).setInputFiles({ name: 'existing-basic.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture)) });
+  await questionList(page);
+  await questionCategory(page, '필수질문');
+  await expect(page.locator('.question-list-item')).toHaveCount(5);
+  await questionCategory(page, '상황·가치관');
+  await expect(page.locator('.question-list-item')).toHaveCount(0);
+  const before = JSON.parse(await downloadBackup(page)).project;
+  expect(before.nodes.map((node: InterviewNode) => node.category)).toEqual(['basic', 'basic', 'basic', 'basic', 'basic', 'resume']);
+  await questionCategory(page, '필수질문');
+  await openQuestion(page, '어떤 지표로 개선 효과를 검증했나요?');
+  await expect(editor(page).getByLabel('질문 분류', { exact: true })).toHaveValue('basic');
+  await editor(page).getByLabel('질문 분류', { exact: true }).selectOption('situational');
+  await closeEditor(page);
+  await expect(page.locator('.question-list-item')).toHaveCount(4);
+  await expect(page.locator('.question-list-item .list-number')).toHaveText(['1-1', '1-2', '1-3', '1-4']);
+  await questionCategory(page, '필수질문');
+  await expect(page.locator('.question-list-item')).toHaveCount(1);
+  await expect(page.locator('.question-list-item')).toContainText('디자인 시스템을 구축하며 팀과 어떻게 협업했나요?');
+  await questionCategory(page, '상황·가치관');
+  await page.getByRole('tab', { name: '마인드맵', exact: true }).click();
+  await expect(page.locator('.react-flow__node-question')).toHaveCount(4);
+  await expect(page.locator('.react-flow__edge')).toHaveCount(4);
+  await saved(page);
+  const savedBackup = await downloadBackup(page);
+  const after = JSON.parse(savedBackup).project;
+  expect(after.nodes.map((node: InterviewNode) => node.category)).toEqual(['situational', 'situational', 'situational', 'situational', 'basic', 'resume']);
+  expect(after.nodes.map(({ category: _category, ...node }: InterviewNode) => node)).toEqual(before.nodes.map(({ category: _category, ...node }: InterviewNode) => node));
+  expect(after.answerStylePresets).toEqual(before.answerStylePresets);
+  await page.reload();
+  await questionList(page);
+  await questionCategory(page, '상황·가치관');
+  await expect(page.locator('.question-list-item')).toHaveCount(4);
+  await page.getByLabel('면접 백업 파일', { exact: true }).setInputFiles({ name: 'reclassified.json', mimeType: 'application/json', buffer: Buffer.from(savedBackup) });
+  await questionCategory(page, '상황·가치관');
+  await expect(page.locator('.question-list-item')).toHaveCount(4);
+  await questionCategory(page, '필수질문');
+  await expect(page.locator('.question-list-item')).toHaveCount(1);
+});
+
+test('creates situational questions and follow-ups without a resume and keeps all four categories available on mobile', async ({ page }) => {
+  await createApplication(page, '상황 면접 준비', '개발자');
+  await page.setViewportSize({ width: 390, height: 844 });
+  const categories = page.getByRole('tablist', { name: '질문 분야', exact: true });
+  await expect(categories.getByRole('tab')).toHaveCount(5);
+  await questionCategory(page, '상황·가치관');
+  await page.getByRole('button', { name: '질문 추가', exact: true }).click();
+  await expect(editor(page).getByLabel('질문 분류', { exact: true })).toHaveValue('situational');
+  await fillQuestion(page, '원칙과 성과가 충돌하면 무엇을 우선하나요?', '판단 기준을 먼저 정리하고 상황과 영향을 검토합니다.');
+  await selectAnswerText(page, '판단 기준');
+  await expect(editor(page).getByLabel('질문 분류', { exact: true })).toHaveValue('situational');
+  await fillQuestion(page, '그 판단 기준을 실제로 적용한 경험은?', '협업 상황에서 원칙과 영향을 함께 설명했습니다.');
+  await closeEditor(page);
+  await questionList(page);
+  await expect(page.locator('.question-list-item')).toHaveCount(2);
+  await questionCategory(page, '필수질문');
+  await expect(page.locator('.question-list-item')).toHaveCount(0);
+  await questionCategory(page, '전체 질문');
+  await expect(page.locator('.question-list-item')).toHaveCount(2);
+  const snapshot = JSON.parse(await downloadBackup(page)).project;
+  expect(snapshot.resume).toBeNull();
+  expect(snapshot.nodes.map((node: InterviewNode) => node.category)).toEqual(['situational', 'situational']);
+  expect(snapshot.nodes[1].parentId).toBe(snapshot.nodes[0].id);
+  expect(await page.evaluate(() => document.body.scrollWidth)).toBeLessThanOrEqual(390);
 });

@@ -74,20 +74,21 @@ describe('project backups', () => {
     original.nodes[0].category = 'basic';
     original.nodes[1].category = 'basic';
     original.nodes[4].category = 'fundamentals';
+    original.nodes[5].category = 'situational';
     original.nodes[0].answerFormatting = [{ start: 0, end: 3, bold: true }];
     original.answerStylePresets = [{ id: 'emphasis', name: '핵심', bold: true }];
     const restored = parseProjectBackup(serializeProject(original));
     expect(restored.nodes.map(entry => entry.category)).toEqual(original.nodes.map(entry => entry.category));
     expect(restored.nodes[0].answerFormatting).toEqual(original.nodes[0].answerFormatting);
     expect(restored.answerStylePresets).toEqual(original.answerStylePresets);
-    expect([...getQuestionCategories(restored.nodes).values()]).toEqual(['basic', 'basic', 'basic', 'basic', 'fundamentals', 'resume']);
+    expect([...getQuestionCategories(restored.nodes).values()]).toEqual(['basic', 'basic', 'basic', 'basic', 'fundamentals', 'situational']);
     const legacy = parseProjectBackup(backup());
     expect(legacy.nodes.every(entry => entry.category === undefined)).toBe(true);
     expect([...getQuestionCategories(legacy.nodes).values()]).toEqual(Array(6).fill('resume'));
   });
 
-  it('rejects unsupported category fields while accepting all three categories', () => {
-    for (const category of ['basic', 'fundamentals', 'resume']) {
+  it('rejects unsupported category fields while accepting all four categories', () => {
+    for (const category of ['basic', 'situational', 'fundamentals', 'resume']) {
       const project = createDemoProject(); Object.assign(project.nodes[0], { category });
       expect(parseProjectBackup(serializeProject(project)).nodes[0].category).toBe(category);
     }
