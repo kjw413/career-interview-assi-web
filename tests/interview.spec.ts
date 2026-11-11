@@ -729,7 +729,7 @@ test('keeps saved answer styles separate between applications and usable in the 
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
-async function questionCategory(page: Page, label: '전체 질문' | '필수질문' | '상황·가치관' | '전공기초' | '자소서기반') {
+async function questionCategory(page: Page, label: '전체 질문' | '필수질문' | '상황·가치관' | '전공·직무' | '자소서기반') {
   await page.getByRole('tablist', { name: '질문 분야', exact: true }).getByRole('tab', { name: label, exact: true }).click();
 }
 
@@ -753,7 +753,7 @@ test('creates independently classified follow-ups without a resume and inherits 
   await questionCategory(page, '필수질문');
   await expect(page.locator('.question-list-item')).toHaveCount(1);
   await expect(page.locator('.question-list-item .list-number')).toHaveText(['1-1']);
-  await questionCategory(page, '전공기초');
+  await questionCategory(page, '전공·직무');
   await expect(page.locator('.question-list-item')).toHaveCount(2);
   await expect(page.locator('.question-list-item .list-number')).toHaveText(['1-2', '1-3']);
   await page.locator('.question-list-item').first().locator('.list-question-path').getByRole('button').click();
@@ -761,7 +761,7 @@ test('creates independently classified follow-ups without a resume and inherits 
   await expect(page.getByRole('tab', { name: '필수질문', exact: true })).toHaveAttribute('aria-selected', 'true');
   await editor(page).getByRole('button', { name: /^꼬리질문 1-2:/ }).click();
   await expect(editor(page).getByLabel('질문 분류', { exact: true })).toHaveValue('fundamentals');
-  await expect(page.getByRole('tab', { name: '전공기초', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tab', { name: '전공·직무', exact: true })).toHaveAttribute('aria-selected', 'true');
   await closeEditor(page);
   await page.getByRole('button', { name: '질문 추가', exact: true }).click();
   await expect(editor(page).getByLabel('질문 분류', { exact: true })).toHaveValue('fundamentals');
@@ -879,7 +879,7 @@ test('replaces only resume-based questions when uploading a new PDF and retains 
   await questionList(page);
   await questionCategory(page, '필수질문');
   await expect(page.locator('.question-list-item')).toHaveCount(1);
-  await questionCategory(page, '전공기초');
+  await questionCategory(page, '전공·직무');
   await expect(page.locator('.question-list-item')).toHaveCount(1);
   await questionCategory(page, '상황·가치관');
   await expect(page.locator('.question-list-item')).toHaveCount(2);

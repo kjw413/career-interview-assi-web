@@ -22,7 +22,7 @@ describe('question categories', () => {
   });
 
   it('honors each explicit category and only inherits missing legacy categories from the nearest parent', () => {
-    expect(QUESTION_CATEGORIES.map(category => category.label)).toEqual(['필수질문', '상황·가치관', '전공기초', '자소서기반']);
+    expect(QUESTION_CATEGORIES.map(category => category.label)).toEqual(['필수질문', '상황·가치관', '전공·직무', '자소서기반']);
     const nodes = [legacy('deep', 'child'), node('child', 'root', 'fundamentals'), node('root', null, 'basic'), legacy('sibling', 'root'), legacy('old-root')];
     expect([...getQuestionCategories(nodes)]).toEqual([
       ['root', 'basic'], ['child', 'fundamentals'], ['deep', 'fundamentals'], ['sibling', 'basic'], ['old-root', 'resume'],

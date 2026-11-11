@@ -4,7 +4,7 @@ import { getQuestionOutline, type QuestionOutlineEntry } from './tree';
 export const QUESTION_CATEGORIES = [
   { id: 'basic', label: '필수질문', description: '자기소개, 지원동기, 이직동기, 강약점 등 나에 대한 핵심 내용을 준비하세요.' },
   { id: 'situational', label: '상황·가치관', description: '갈등 대응, 우선순위와 선택 상황에서의 판단 기준과 행동 이유를 정리하세요.' },
-  { id: 'fundamentals', label: '전공기초', description: '전공과 직무에서 필요한 기초 개념, 원리와 핵심 지식을 정리하세요.' },
+  { id: 'fundamentals', label: '전공·직무', description: '전공과 직무에서 필요한 기초 개념, 원리와 핵심 지식을 정리하세요.' },
   { id: 'resume', label: '자소서기반', description: '이력서·자기소개서의 경험과 문장에서 예상 질문을 연결하세요.' },
 ] as const satisfies readonly { id: QuestionCategory; label: string; description: string }[];
 

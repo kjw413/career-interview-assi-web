@@ -181,7 +181,7 @@ test('syncs independent question categories across browsers while preserving leg
     await expect(second.locator('.question-list-item')).toHaveCount(5);
     await expect(second.locator('[data-question-id="demo-q5"]')).toBeVisible();
     await expect(second.locator('[data-question-id="demo-q6"]')).toBeVisible();
-    await secondCategories.getByRole('tab', { name: '전공기초', exact: true }).click();
+    await secondCategories.getByRole('tab', { name: '전공·직무', exact: true }).click();
     await expect(second.locator('.question-list-item')).toHaveCount(0);
     await secondCategories.getByRole('tab', { name: '전체 질문', exact: true }).click();
     await expect(second.locator('.question-list-item')).toHaveCount(6);
