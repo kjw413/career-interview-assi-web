@@ -5,7 +5,7 @@ import {
   LogOut, RefreshCw, LayoutGrid, List, LoaderCircle, LockKeyhole, MoreHorizontal, PanelLeftClose,
   PanelLeftOpen, Plus, Printer, Search, Settings2, Sparkles, Trash2, Upload, X, Maximize2, Minimize2,
 } from 'lucide-react';
-import type { InterviewNode, Project, QuestionCategory, QuestionCategoryFilter } from './types';
+import type { InterviewNode, InterviewStage, Project, QuestionCategory, QuestionCategoryFilter } from './types';
 import { createNode, createProject, getQuestionOutline, getStats, getSubtreeIds, reorderQuestionBranch } from './lib/tree';
 import { localStore, type ProjectStore } from './lib/projectStore';
 import { cloudConfig } from './lib/supabase';
@@ -17,6 +17,8 @@ import QuestionEditor from './components/QuestionEditor';
 import QuestionList from './components/QuestionList';
 import QuestionCategories from './components/QuestionCategories';
 import PrintDialog from './components/PrintDialog';
+import InterviewStages from './components/InterviewStages';
+import { copyQuestionsToStage, getStageNodes, replaceStageNodes } from './lib/interviewStages';
 import { getQuestionCategories, removeQuestionCategory, setQuestionCategory } from './lib/questionCategories';
 
 const EMPTY_PROJECTS: Project[] = [];
@@ -118,6 +120,7 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
   const [projects, setProjects] = useState<Project[]>(EMPTY_PROJECTS);
   const projectsRef = useRef<Project[]>(EMPTY_PROJECTS);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [stage, setStage] = useState<InterviewStage>('first');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -150,7 +153,9 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
   const saveErrors = useRef(new Set<string>());
   const pendingSaves = useRef(new Map<string, Project>());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const active = projects.find((p) => p.id === activeId) ?? null;
+  const storedActive = projects.find((p) => p.id === activeId) ?? null;
+  const active = useMemo(() => storedActive ? { ...storedActive, nodes: getStageNodes(storedActive.nodes, stage) } : null, [storedActive, stage]);
+  const stageCounts = { first: getStageNodes(storedActive?.nodes ?? [], 'first').length, second: getStageNodes(storedActive?.nodes ?? [], 'second').length };
   const selected = active?.nodes.find((n) => n.id === selectedId) ?? null;
   const stats = getStats(active?.nodes ?? []);
 
@@ -260,14 +265,35 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
     setLoading(true);
     try { await drainSaves(); await onSignOut?.(); } catch (error) { setToast(error instanceof Error ? error.message : '로그아웃하지 못했습니다.'); setLoading(false); }
   }
-  const updateProject = useCallback((id: string, patch: Partial<Project>) => {
+  const updateStoredProject = useCallback((id: string, patch: Partial<Project>) => {
     const original = projectsRef.current.find((p) => p.id === id);
     if (!original) return;
     const next = { ...original, ...patch, updatedAt: Date.now() };
     const items = projectsRef.current.map((p) => p.id === id ? next : p);
     projectsRef.current = items; setProjects(items); persist(next);
   }, []);
-  function switchProject(id: string) { setActiveId(id); setSelectedId(null); setFilter('all'); setSearch(''); setCategoryFilter('all'); setSidebarOpen(false); }
+  function updateProject(id: string, patch: Partial<Project>, targetStage = stage) {
+    const original = projectsRef.current.find(project => project.id === id);
+    if (!original) return;
+    updateStoredProject(id, patch.nodes === undefined ? patch : { ...patch, nodes: replaceStageNodes(original.nodes, targetStage, patch.nodes) });
+  }
+  function switchStage(next: InterviewStage) {
+    setStage(next); setSelectedId(null); setSelection(null); setFilter('all'); setSearch(''); setCategoryFilter('all'); setPrintOpen(false);
+  }
+  function copyQuestions(ids: ReadonlySet<string>) {
+    if (!storedActive) return;
+    const current = projectsRef.current.find(project => project.id === storedActive.id);
+    if (!current) return;
+    const destination: InterviewStage = stage === 'first' ? 'second' : 'first';
+    try {
+      const nodes = copyQuestionsToStage(current.nodes, stage, destination, ids);
+      if (nodes === current.nodes) return;
+      updateStoredProject(current.id, { nodes });
+      switchStage(destination);
+      setToast(`선택한 질문 ${nodes.length - current.nodes.length}개와 답변을 ${destination === 'first' ? '1차(직무)' : '2차(임원)'}에 복사했습니다.`);
+    } catch (error) { setToast(error instanceof Error ? error.message : '질문을 복사하지 못했습니다.'); }
+  }
+  function switchProject(id: string) { setStage('first'); setActiveId(id); setSelectedId(null); setFilter('all'); setSearch(''); setCategoryFilter('all'); setSidebarOpen(false); }
   function addProject(project: Project) {
     const next = [...projectsRef.current, project]; projectsRef.current = next; setProjects(next); persist(project); switchProject(project.id); setProjectForm(null);
   }
@@ -294,7 +320,7 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
     const ids = getSubtreeIds(active.nodes, selected.id);
     setConfirm({ title: '이 질문을 삭제할까요?', description: `이 질문${ids.size > 1 ? `과 연결된 꼬리질문 ${ids.size - 1}개` : ''}가 함께 삭제됩니다. 삭제 후에는 되돌릴 수 없습니다.`, label: '질문 삭제', action: () => { updateProject(active.id, { nodes: active.nodes.filter((n) => !ids.has(n.id)) }); setSelectedId(null); setConfirm(null); setToast('질문을 삭제했습니다.'); } });
   }
-  async function processPdf(file: File, projectId: string) {
+  async function processPdf(file: File, projectId: string, targetStage: InterviewStage) {
     const controller = new AbortController(); uploadAbort.current = controller;
     setUpload({ projectId, stage: 'PDF를 확인하고 있어요', progress: 0 });
     try {
@@ -304,8 +330,9 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
       const resume = { name: file.name, ...result };
       await putResumeFile(projectId, file, resume);
       const current = projectsRef.current.find(project => project.id === projectId);
-      const nodes = current?.resume ? removeQuestionCategory(current.nodes, 'resume') : current?.nodes ?? [];
-      updateProject(projectId, { resume, nodes, isDemo: false });
+      const currentNodes = getStageNodes(current?.nodes ?? [], targetStage);
+      const nodes = current?.resume ? removeQuestionCategory(currentNodes, 'resume') : currentNodes;
+      updateProject(projectId, { resume, nodes, isDemo: false }, targetStage);
       setSelectedId(null); setResumeOpen(true); setCategoryFilter('resume'); setToast(`${result.pages}페이지의 이력서를 읽었습니다. 문구를 선택해 질문을 만들어 보세요.`);
     } catch (error) { if (!controller.signal.aborted) setToast(error instanceof Error ? error.message : 'PDF를 읽지 못했습니다. 다른 파일을 확인해 주세요.'); }
     finally { setUpload(null); uploadAbort.current = null; }
@@ -314,8 +341,8 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
     if (!file || !active || upload) return;
     const categories = getQuestionCategories(active.nodes);
     if (active.resume && active.nodes.some(node => categories.get(node.id) === 'resume')) {
-      setConfirm({ title: '이력서를 교체할까요?', description: '기존 자소서기반 질문과 답변이 삭제됩니다. 다른 분류의 질문은 유지되며, 부모가 삭제되면 남은 상위 질문에 연결하거나 독립 질문으로 보존합니다. 필요한 내용은 먼저 백업해 주세요. 새 PDF를 읽는 데 실패하면 기존 내용은 유지됩니다.', label: '교체하기', action: () => { setConfirm(null); void processPdf(file, active.id); } });
-    } else void processPdf(file, active.id);
+      setConfirm({ title: '이력서를 교체할까요?', description: '이력서는 두 차수에서 함께 사용합니다. 현재 차수의 기존 자소서기반 질문과 답변이 삭제됩니다. 다른 차수와 다른 분류의 질문은 유지되며, 부모가 삭제되면 남은 상위 질문에 연결하거나 독립 질문으로 보존합니다. 필요한 내용은 먼저 백업해 주세요. 새 PDF를 읽는 데 실패하면 기존 내용은 유지됩니다.', label: '교체하기', action: () => { setConfirm(null); void processPdf(file, active.id, stage); } });
+    } else void processPdf(file, active.id, stage);
   }
   async function importBackup(file: File | undefined) {
     if (!file) return;
@@ -323,10 +350,10 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
     catch (error) { setToast(error instanceof Error ? error.message : '백업을 불러오지 못했습니다.'); }
   }
   function exportBackup() {
-    if (!active) return;
+    if (!storedActive) return;
     try {
-      download(`${active.company}_${active.role}_면접백업.json`, new Blob([serializeProject(active)], { type: 'application/json' }));
-      setToast('이력서 텍스트와 질문 트리를 백업했습니다. PDF 원본은 별도 보관해 주세요.');
+      download(`${storedActive.company}_${storedActive.role}_면접백업.json`, new Blob([serializeProject(storedActive)], { type: 'application/json' }));
+      setToast('이력서 텍스트와 두 차수의 질문을 모두 백업했습니다. PDF 원본은 별도 보관해 주세요.');
     } catch (error) { setToast(error instanceof Error ? error.message : '백업을 만들지 못했습니다.'); }
   }
   async function openOriginal() {
@@ -354,17 +381,19 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
     if (categoryFilter !== 'all' || filter !== 'all' || search.trim()) return;
     const current = projectsRef.current.find((project) => project.id === activeId);
     if (!current) return;
-    const nodes = reorderQuestionBranch(current.nodes, sourceId, targetId, placement);
-    if (nodes === current.nodes) return;
+    const currentNodes = getStageNodes(current.nodes, stage);
+    const nodes = reorderQuestionBranch(currentNodes, sourceId, targetId, placement);
+    if (nodes === currentNodes) return;
     updateProject(current.id, { nodes });
     setToast('질문 묶음의 순서를 변경했습니다.');
   }
   function applyMapPositions(positions: Record<string, { x: number; y: number }>) {
     const current = projectsRef.current.find(project => project.id === activeId);
     if (!current) return;
-    const categories = getQuestionCategories(current.nodes);
+    const currentNodes = getStageNodes(current.nodes, stage);
+    const categories = getQuestionCategories(currentNodes);
     let changed = false;
-    const nodes = current.nodes.map(node => {
+    const nodes = currentNodes.map(node => {
       const position = positions[node.id];
       if (!position || (categoryFilter !== 'all' && categories.get(node.id) !== categoryFilter)
         || (position.x === node.position?.x && position.y === node.position?.y)) return node;
@@ -422,12 +451,13 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
         <section className="overview-strip" aria-label="준비 현황"><div className="overview-project"><span className="overview-logo" style={{ background: active.companyColor }}>{active.company.slice(0, 1)}</span><div><strong>{active.company}<ChevronDown size={13} /></strong><small>{active.role}</small></div></div><span className="overview-divider" /><div className="overview-stat"><span>전체 질문</span><strong>{stats.total}<small>개</small></strong></div><div className="overview-stat"><span><span className="status-dot green" />준비 완료</span><strong>{stats.ready}<small>개</small></strong></div><div className="overview-stat"><span><span className="status-dot amber" />작성 중</span><strong>{stats.draft}<small>개</small></strong></div><div className="overview-progress"><div><span>나의 준비도</span><strong>{stats.total ? Math.round(stats.ready / stats.total * 100) : 0}<small>%</small></strong></div><div className="progress-track"><span style={{ width: `${stats.total ? stats.ready / stats.total * 100 : 0}%` }} /></div></div></section>
         <section className="workspace-area" aria-label="면접 준비 작업 영역">
           <div className="workspace-toolbar"><div className="toolbar-left">{(categoryFilter === 'all' || categoryFilter === 'resume') && <button className={`icon-button panel-toggle ${resumeOpen ? 'is-on' : ''}`} aria-label={resumeOpen ? '이력서 패널 접기' : '이력서 패널 열기'} onClick={() => setResumeOpen(!resumeOpen)}>{resumeOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}</button>}<span className="toolbar-line" /><div className="view-tabs" role="tablist" aria-label="질문 보기 방식"><button role="tab" aria-selected={view === 'map'} className={view === 'map' ? 'active' : ''} onClick={() => setView('map')}><GitBranch size={15} />마인드맵</button><button role="tab" aria-selected={view === 'list'} className={view === 'list' ? 'active' : ''} onClick={() => { setView('list'); if (window.innerWidth <= 600) setResumeOpen(false); }}><List size={16} />질문 목록</button></div><button ref={expandButton} className="button workspace-expand-button" aria-label={workspaceExpanded ? '작업 영역 전체화면 종료' : '작업 영역 전체화면'} aria-pressed={workspaceExpanded} title={workspaceExpanded ? '전체화면 종료 (Esc)' : '작업 영역 전체화면'} onClick={() => { setWorkspaceExpanded(!workspaceExpanded); setSelection(null); }}>{workspaceExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}<span>{workspaceExpanded ? '전체화면 종료' : '전체화면'}</span></button></div><div className="toolbar-right">{workspaceExpanded && saveIndicator}<label className="canvas-search"><Search size={15} /><input aria-label="질문 검색" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="질문 검색" />{search && <button className="icon-button" aria-label="검색 초기화" onClick={() => setSearch('')}><X size={12} /></button>}</label><span className="toolbar-line" /><select aria-label="준비 상태 필터" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}><option value="all">모든 상태</option><option value="ready">준비 완료</option><option value="draft">작성 중</option></select><button className="button button-primary add-question" onClick={() => addQuestion(null, '')}><Plus size={15} /><span>질문 추가</span></button></div></div>
+          <InterviewStages key={active.id} value={stage} counts={stageCounts} nodes={active.nodes} onChange={switchStage} onCopy={copyQuestions} disabled={!!upload || loading || resumeEditing} />
           <QuestionCategories value={categoryFilter} counts={categoryCounts} onChange={switchCategory} />
           <div className={`workspace-content ${selected && !workspaceExpanded ? 'with-editor' : ''}`}>
             {showResumePanel && <aside className="resume-panel"><div className="resume-panel-heading"><div><FileText size={16} /><strong>나의 이력서</strong><span className="tiny-badge">{active.resume ? `${active.resume.pages}P` : 'PDF'}</span></div><button className="icon-button" aria-label="이력서 패널 닫기" onClick={() => setResumeOpen(false)}><X size={15} /></button></div>
             {upload?.projectId === active.id ? <div className="upload-progress"><div className="ocr-loader"><FileText size={32} /><span /></div><h3>경험을 읽고 있어요</h3><p>{upload.stage}</p><div className="progress-track"><span style={{ width: `${Math.round(upload.progress * 100)}%` }} /></div><span>{Math.round(upload.progress * 100)}%</span><button className="text-button" onClick={() => { uploadAbort.current?.abort(); setToast('이력서 읽기를 취소했습니다.'); }}>취소</button></div> : active.resume ? <><div className="resume-file"><span className="pdf-icon">PDF</span><span title={active.resume.name}>{active.resume.name}<small>{active.isDemo ? '가상의 예시 이력서' : active.resume.usedOcr ? 'OCR 인식 완료' : '텍스트 인식 완료'}</small></span><button className="icon-button" aria-label="이력서 교체" onClick={() => fileRef.current?.click()} disabled={!!upload}><Upload size={15} /></button></div><div className="resume-tip"><span className="tip-cursor">↖</span><p>궁금한 <strong>단어나 문장을 선택</strong>하면<br />새로운 질문을 연결할 수 있어요.</p></div><div className="resume-scroll" onScroll={() => setSelection(null)}>{resumeEditing ? <div className="resume-correction"><label htmlFor="resume-text-edit">인식한 텍스트 수정</label><textarea id="resume-text-edit" value={resumeDraft} onChange={(e) => setResumeDraft(e.target.value)} /><p>기존 질문의 연결 키워드는 유지됩니다.</p><div><button className="button button-outline" onClick={() => setResumeEditing(false)}>취소</button><button className="button button-primary" disabled={!resumeDraft.trim()} onClick={() => { updateProject(active.id, { resume: { ...active.resume!, text: resumeDraft } }); setResumeEditing(false); }}>수정 저장</button></div></div> : <SelectionText text={active.resume.text} nodes={active.nodes} onSelect={setSelection} />}</div><div className="resume-footer"><button className="text-button" onClick={() => { setResumeDraft(active.resume!.text); setResumeEditing(true); }}>텍스트 수정</button><button className="text-button" onClick={() => void openOriginal()}>원본 저장<ArrowDownToLine size={12} /></button></div></> : <div className="resume-upload" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); receivePdf(e.dataTransfer.files[0]); }}><div className="upload-icon"><Upload size={27} /></div><h3>이력서에서 시작하세요</h3><p>PDF를 끌어다 놓거나<br />아래 버튼으로 업로드해 주세요.</p><button className="button button-primary" onClick={() => fileRef.current?.click()} disabled={!!upload}><Plus size={15} />이력서 업로드</button><button className="text-button upload-manual" onClick={() => { setResumeDraft(''); setManualResumeOpen(true); }}>또는 텍스트로 직접 입력</button><small>PDF · 최대 20MB / 20페이지<br />한국어·영어 OCR 지원</small><div className="upload-privacy"><LockKeyhole size={13} />{isCloud ? 'PDF는 내 계정의 비공개 저장소에 보관돼요.' : '이력서는 이 브라우저 안에만 저장돼요.'}</div></div>}
             </aside>}
-            <div className="map-panel">{view === 'map' ? <InterviewMap project={active} onPositionsChange={applyMapPositions} selectedId={selectedId} onSelect={setSelectedId} onNavigate={navigateQuestion} onAdd={addQuestion} onPositionChange={(id, position) => updateProject(active.id, { nodes: active.nodes.map((n) => n.id === id ? { ...n, position } : n) })} filter={filter} search={search} categoryFilter={categoryFilter} categoryById={categoryById} /> : <QuestionList outline={questionOutline} selectedId={selectedId} filter={filter} search={search} categoryFilter={categoryFilter} categoryById={categoryById} onSelect={setSelectedId} onNavigate={navigateQuestion} onReorder={reorderQuestions} />}</div>
+            <div className="map-panel">{view === 'map' ? <InterviewMap key={`${active.id}-${stage}`} project={active} onPositionsChange={applyMapPositions} selectedId={selectedId} onSelect={setSelectedId} onNavigate={navigateQuestion} onAdd={addQuestion} onPositionChange={(id, position) => updateProject(active.id, { nodes: active.nodes.map((n) => n.id === id ? { ...n, position } : n) })} filter={filter} search={search} categoryFilter={categoryFilter} categoryById={categoryById} /> : <QuestionList key={`${active.id}-${stage}`} outline={questionOutline} selectedId={selectedId} filter={filter} search={search} categoryFilter={categoryFilter} categoryById={categoryById} onSelect={setSelectedId} onNavigate={navigateQuestion} onReorder={reorderQuestions} />}</div>
             {questionEditor && (workspaceExpanded ? <Modal title="질문 크게 편집" className="question-modal" showClose={false} initialFocus=".editor-question" onClose={() => setSelectedId(null)}>{questionEditor}</Modal> : questionEditor)}
           </div>
           <div className="workspace-status"><span><span className="status-dot green" />나의 경험이 질문으로, 질문이 자신감으로.</span><span><LockKeyhole size={11} />{isCloud ? '내 계정에 클라우드 저장' : '브라우저에 로컬 저장'}</span></div>
@@ -439,9 +469,9 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
     {selection && active && <button className="selection-popover" style={{ left: selection.x, top: Math.min(selection.y, window.innerHeight - 60) }} onMouseDown={(e) => e.preventDefault()} onClick={() => addQuestion(null, selection.text, 'resume')}><Plus size={15} /><span>“{selection.text.length > 16 ? `${selection.text.slice(0, 16)}…` : selection.text}”에서 질문 추가</span></button>}
     {manualResumeOpen && active && <Modal onClose={() => setManualResumeOpen(false)} title="이력서 텍스트 입력" wide><p className="eyebrow">YOUR STORY STARTS HERE</p><h2>이력서 내용을 직접 입력하세요</h2><p className="modal-description">이력서 전체를 붙여 넣어도 좋아요. 입력한 문구에서 질문을 연결할 수 있습니다.</p><label className="form-label" htmlFor="manual-resume">이력서 내용</label><textarea id="manual-resume" className="manual-resume-text" value={resumeDraft} onChange={(e) => setResumeDraft(e.target.value)} maxLength={1000000} placeholder="경력, 프로젝트, 학력, 특기사항 등을 입력해 주세요." /><button className="button button-primary form-submit" disabled={!resumeDraft.trim()} onClick={() => { updateProject(active.id, { resume: { name: '직접 입력한 이력서', text: resumeDraft.trim(), pages: 1, usedOcr: false } }); setManualResumeOpen(false); setToast('이력서를 저장했습니다. 문구를 선택해 질문을 연결해 보세요.'); }}>이력서 저장<ArrowRight size={16} /></button></Modal>}
     {projectForm && <ProjectForm project={projectForm === 'edit' ? active ?? undefined : undefined} onClose={() => setProjectForm(null)} onSubmit={(company, role) => { if (projectForm === 'edit' && active) { updateProject(active.id, { company, role }); setProjectForm(null); } else addProject(createProject(company, role)); }} />}
-    {printOpen && active && <Modal onClose={() => setPrintOpen(false)} title="질문·답변 인쇄" className="print-modal" initialFocus="#print-category"><PrintDialog project={active} outline={questionOutline} categoryById={categoryById} initialCategory={categoryFilter} initialStatus={filter} /></Modal>}
+    {printOpen && active && <Modal onClose={() => setPrintOpen(false)} title="질문·답변 인쇄" className="print-modal" initialFocus="#print-category"><PrintDialog stage={stage} project={active} outline={questionOutline} categoryById={categoryById} initialCategory={categoryFilter} initialStatus={filter} /></Modal>}
     {confirm && <Modal onClose={() => setConfirm(null)} title={confirm.title}><div className="modal-symbol danger-symbol"><Trash2 size={24} /></div><h2>{confirm.title}</h2><p className="modal-description">{confirm.description}</p><div className="confirm-actions"><button className="button button-outline" onClick={() => setConfirm(null)}>취소</button><button className="button button-danger" onClick={confirm.action}>{confirm.label ?? '삭제'}</button></div></Modal>}
-    {helpOpen && <Modal onClose={() => setHelpOpen(false)} title="folio 사용 가이드" wide><p className="eyebrow">A LITTLE GUIDE</p><h2>한 문장에서, 나만의 면접 지도로.</h2><p className="modal-description">면접관의 시선으로 질문하고, 나의 언어로 답해 보세요.</p><div className="guide-steps">{[{ icon: <FolderOpen size={21} />, title: '01. 지원서를 만들고 분야를 골라요', body: '지원 기업과 직무를 등록하고 필수질문·상황·가치관·전공·직무·자소서기반 중 준비할 분야를 선택하세요. 필수질문·상황·가치관·전공·직무는 이력서 없이 바로 작성할 수 있어요.' }, { icon: <BookOpen size={21} />, title: '02. 이력서의 문구에서 질문을 시작해요', body: '자소서기반 질문은 PDF를 올리고 단어나 문장을 선택해 연결할 수 있어요. 스캔된 PDF도 한국어·영어 OCR로 읽습니다. 예상 질문과 답변은 직접 작성해요.' }, { icon: <GitBranch size={21} />, title: '03. 답변에서 다음 질문으로 이어가요', body: '질문 편집 화면에서 답변 일부를 선택하면 꼬리질문을 만들 수 있어요. 여러 갈래로, 원하는 만큼 확장하세요.' }, { icon: <CheckCircle2 size={21} />, title: '04. 다듬고, 완료하고, 백업해요', body: '질문과 답변을 다듬고 준비 상태를 표시하세요. PDF 인쇄로 A4 답변 스크립트나 강조 키워드 노트를 만들 수 있어요. 브라우저 데이터 삭제에 대비해 백업 파일도 보관해 주세요.' }].map((step) => <div className="guide-step" key={step.title}><span>{step.icon}</span><div><h3>{step.title}</h3><p>{step.body}</p></div></div>)}</div><button className="button button-primary form-submit" onClick={() => setHelpOpen(false)}>준비 시작하기<ArrowRight size={16} /></button></Modal>}
+    {helpOpen && <Modal onClose={() => setHelpOpen(false)} title="folio 사용 가이드" wide><p className="eyebrow">A LITTLE GUIDE</p><h2>한 문장에서, 나만의 면접 지도로.</h2><p className="modal-description">면접관의 시선으로 질문하고, 나의 언어로 답해 보세요.</p><div className="guide-steps">{[{ icon: <FolderOpen size={21} />, title: '01. 지원서를 만들고 분야를 골라요', body: '기존 질문은 1차(직무)에 있어요. 면접 차수 탭에서 2차(임원)로 전환하거나 원하는 질문만 선택해 복사할 수 있어요. 지원 기업과 직무를 등록하고 필수질문·상황·가치관·전공·직무·자소서기반 중 준비할 분야를 선택하세요. 필수질문·상황·가치관·전공·직무는 이력서 없이 바로 작성할 수 있어요.' }, { icon: <BookOpen size={21} />, title: '02. 이력서의 문구에서 질문을 시작해요', body: '자소서기반 질문은 PDF를 올리고 단어나 문장을 선택해 연결할 수 있어요. 스캔된 PDF도 한국어·영어 OCR로 읽습니다. 예상 질문과 답변은 직접 작성해요.' }, { icon: <GitBranch size={21} />, title: '03. 답변에서 다음 질문으로 이어가요', body: '질문 편집 화면에서 답변 일부를 선택하면 꼬리질문을 만들 수 있어요. 여러 갈래로, 원하는 만큼 확장하세요.' }, { icon: <CheckCircle2 size={21} />, title: '04. 다듬고, 완료하고, 백업해요', body: '질문과 답변을 다듬고 준비 상태를 표시하세요. PDF 인쇄로 A4 답변 스크립트나 강조 키워드 노트를 만들 수 있어요. 브라우저 데이터 삭제에 대비해 백업 파일도 보관해 주세요.' }].map((step) => <div className="guide-step" key={step.title}><span>{step.icon}</span><div><h3>{step.title}</h3><p>{step.body}</p></div></div>)}</div><button className="button button-primary form-submit" onClick={() => setHelpOpen(false)}>준비 시작하기<ArrowRight size={16} /></button></Modal>}
     {privacyOpen && <Modal onClose={() => setPrivacyOpen(false)} title="저장 공간 안내"><div className="modal-symbol"><LockKeyhole size={24} /></div><h2>{isCloud ? '내 계정으로, 어디서든.' : '내 이야기는, 내 브라우저에.'}</h2><p className="modal-description">{isCloud ? '이력서 PDF와 질문 트리는 로그인한 계정의 Supabase 저장소에 보관됩니다. 같은 계정으로 로그인하면 다른 기기에서 이어서 준비할 수 있습니다. PDF 처리와 OCR은 브라우저에서 실행됩니다.' : '이력서 PDF, 인식한 텍스트, 질문과 답변은 현재 기기의 브라우저 저장소에 보관됩니다. PDF 처리와 OCR도 브라우저에서 실행됩니다.'}</p><div className="privacy-note"><strong>백업을 함께 보관해 주세요.</strong><p>{isCloud ? '다른 기기에서 작성한 최신 내용은 ‘최신 내용 불러오기’ 버튼으로 확인하세요. 같은 지원서를 동시에 수정하면 덮어쓰기를 막고 안내합니다.' : '다른 기기와 자동 동기화되지 않으며, 브라우저 데이터를 삭제하면 준비 내용도 삭제됩니다.'} ‘백업 내보내기’로 질문 트리와 이력서 텍스트를 보관할 수 있어요. PDF 원본은 별도로 보관해 주세요.</p></div><button className="button button-primary form-submit" onClick={() => setPrivacyOpen(false)}>확인했어요<Check size={16} /></button></Modal>}
     {toast && <div className="toast" role="status"><CheckCircle2 size={18} /><span>{toast}</span><button onClick={() => setToast('')} aria-label="알림 닫기"><X size={15} /></button></div>}
   </div>;

@@ -1,11 +1,14 @@
 import { Fragment } from 'react';
+import type { InterviewStage } from '../types';
 import FormattedText, { formattingStyle } from './FormattedText';
 import { QUESTION_CATEGORIES } from '../lib/questionCategories';
+import { INTERVIEW_STAGES } from '../lib/interviewStages';
 import { PRINT_CATEGORY_OPTIONS, PRINT_STATUS_OPTIONS, trimFormattedText, type PrintAnswerMode, type PrintEntry, type PrintScope } from '../lib/printScript';
 
 interface PrintSheetProps {
   company: string;
   role: string;
+  stage?: InterviewStage;
   entries: PrintEntry[];
   scope: PrintScope;
   mode: PrintAnswerMode;
@@ -30,17 +33,18 @@ function PrintAnswer({ entry, mode }: { entry: PrintEntry; mode: PrintAnswerMode
 }
 
 /** One continuous document; the browser paginates it so long answers flow onto the next page instead of being cut. */
-export default function PrintSheet({ company, role, entries, scope, mode, printedAt }: PrintSheetProps) {
+export default function PrintSheet({ company, role, stage, entries, scope, mode, printedAt }: PrintSheetProps) {
   const title = mode === 'keywords' ? '면접 키워드 노트' : '면접 답변 스크립트';
   const scopeLabel = PRINT_CATEGORY_OPTIONS.find(option => option.id === scope.category)?.label;
   const statusLabel = PRINT_STATUS_OPTIONS.find(option => option.id === scope.status)?.label;
+  const stageLabel = stage ? INTERVIEW_STAGES.find(option => option.id === stage)?.label : undefined;
   return <article className={`print-sheet print-sheet-${mode}`}>
     <header className="print-sheet-header">
       <div className="print-sheet-title">
         <p className="print-sheet-kicker">{company} · {role}</p>
         <h1>{title}</h1>
       </div>
-      <p className="print-sheet-meta">{scopeLabel} · {statusLabel} · 질문 {entries.length}개<br />{printedAt} 출력</p>
+      <p className="print-sheet-meta">{stageLabel && <>{stageLabel}<br /></>}{scopeLabel} · {statusLabel} · 질문 {entries.length}개<br />{printedAt} 출력</p>
     </header>
     {entries.length ? <ol className="print-sheet-list">
       {entries.map(entry => {

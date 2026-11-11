@@ -343,3 +343,56 @@ async function createProjectWithoutWaiting(page: Page) {
   const dialog = page.getByRole('dialog'); await dialog.getByLabel('지원 기업', { exact: true }).fill('미저장 기업'); await dialog.getByLabel('지원 직무', { exact: true }).fill('개발자');
   await dialog.getByRole('button', { name: '지원서 만들기', exact: true }).click();
 }
+
+test('shares selected second-stage interview copies across browsers without changing first-stage preparation', async ({ browser, page, context }) => {
+  const backend = new Backend();
+  const project = { ...createDemoProject(), id: 'cloud-interview-stages', company: '차수 공유 기업', isDemo: false };
+  project.nodes[0].category = 'basic';
+  project.nodes[1].category = 'situational';
+  project.nodes[0].answerFormatting = [{ start: 0, end: 3, bold: true, color: '#b42318' }];
+  project.answerStylePresets = [{ id: 'shared-style', name: '핵심', bold: true, color: '#b42318' }];
+  const original = structuredClone(project.nodes);
+  const key = `${ids['a@example.com']}/${project.id}`;
+  backend.rows.set(key, { id: project.id, user_id: ids['a@example.com'], data: project as unknown as Record<string, unknown>, revision: 1, pdf_path: null });
+  await backend.install(context);
+  await login(page);
+  await page.getByRole('button', { name: '2차(임원)으로 질문 복사', exact: true }).click();
+  const copy = page.getByRole('dialog', { name: '복사할 질문 선택', exact: true });
+  await copy.getByRole('checkbox', { name: '1-1 온보딩에서 어떤 문제를 발견했고, 어떻게 개선했나요?', exact: true }).check();
+  await copy.getByRole('checkbox', { name: '1-2 사용자 인터뷰는 어떤 방식으로 진행했나요?', exact: true }).check();
+  await copy.getByRole('button', { name: '선택한 질문 복사', exact: true }).click();
+  await expect(page.getByText('모든 변경사항 저장됨', { exact: true })).toBeVisible();
+  await expect.poll(() => (backend.rows.get(key)?.data.nodes as typeof project.nodes | undefined)?.length).toBe(8);
+  const saved = backend.rows.get(key)!;
+  const savedNodes = saved.data.nodes as typeof project.nodes;
+  expect(savedNodes.filter(node => node.stage !== 'second')).toEqual(original);
+  const copied = savedNodes.filter(node => node.stage === 'second');
+  expect(copied).toHaveLength(2);
+  expect(copied[1].parentId).toBe(copied[0].id);
+  expect(copied[0].answerFormatting).toEqual(project.nodes[0].answerFormatting);
+  expect(saved.data.answerStylePresets).toEqual(project.answerStylePresets);
+  const laptop = await browser.newContext({ baseURL: 'http://127.0.0.1:5174' });
+  try {
+    await backend.install(laptop);
+    const second = await laptop.newPage();
+    await login(second);
+    const stages = second.getByRole('tablist', { name: '면접 차수', exact: true });
+    await stages.getByRole('tab', { name: '2차(임원)', exact: true }).click();
+    await second.getByRole('tab', { name: '질문 목록', exact: true }).click();
+    await expect(second.locator('.question-list-item')).toHaveCount(2);
+    await second.locator('.list-question-open').filter({ hasText: project.nodes[0].question }).click();
+    await expect(second.getByRole('textbox', { name: '나의 답변', exact: true })).toHaveText(project.nodes[0].answer);
+    await second.getByRole('textbox', { name: '나의 답변', exact: true }).fill('복잡한 가입 절차를 줄여 고객이 편하게 시작하도록 했습니다.');
+    await expect(second.getByText('모든 변경사항 저장됨', { exact: true })).toBeVisible();
+    await expect.poll(() => (backend.rows.get(key)?.data.nodes as typeof project.nodes | undefined)?.find(node => node.id === copied[0].id)?.answer)
+      .toBe('복잡한 가입 절차를 줄여 고객이 편하게 시작하도록 했습니다.');
+    expect((backend.rows.get(key)!.data.nodes as typeof project.nodes).filter(node => node.stage !== 'second')).toEqual(original);
+    await page.getByRole('button', { name: '최신 내용 불러오기', exact: true }).click();
+    await page.getByRole('tablist', { name: '면접 차수', exact: true }).getByRole('tab', { name: '2차(임원)', exact: true }).click();
+    await page.getByRole('tab', { name: '질문 목록', exact: true }).click();
+    await expect(page.locator('.list-question-open').filter({ hasText: project.nodes[0].question })).toContainText('복잡한 가입 절차를 줄여 고객이 편하게 시작하도록 했습니다.');
+    await page.getByRole('tablist', { name: '면접 차수', exact: true }).getByRole('tab', { name: '1차(직무)', exact: true }).click();
+    await expect(page.locator('.question-list-item')).toHaveCount(6);
+    await expect(page.locator('.list-question-open').filter({ hasText: project.nodes[0].question })).toContainText(project.nodes[0].answer);
+  } finally { await laptop.close(); }
+});

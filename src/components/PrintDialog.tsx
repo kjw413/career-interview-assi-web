@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Highlighter, Printer, ScrollText } from 'lucide-react';
-import type { Project, QuestionCategory, QuestionCategoryFilter } from '../types';
+import type { InterviewStage, Project, QuestionCategory, QuestionCategoryFilter } from '../types';
 import type { QuestionOutlineEntry } from '../lib/tree';
+import { INTERVIEW_STAGES } from '../lib/interviewStages';
 import {
   PRINT_CATEGORY_OPTIONS, PRINT_STATUS_OPTIONS, hasPrintableAnswer, printFileName, selectPrintEntries,
   type PrintAnswerMode, type PrintStatusFilter,
@@ -12,6 +13,7 @@ import './print.css';
 
 interface PrintDialogProps {
   project: Project;
+  stage?: InterviewStage;
   outline: QuestionOutlineEntry[];
   categoryById: ReadonlyMap<string, QuestionCategory>;
   initialCategory: QuestionCategoryFilter;
@@ -38,7 +40,7 @@ function readPreferences(): PrintPreferences {
   }
 }
 
-export default function PrintDialog({ project, outline, categoryById, initialCategory, initialStatus }: PrintDialogProps) {
+export default function PrintDialog({ project, stage, outline, categoryById, initialCategory, initialStatus }: PrintDialogProps) {
   const [category, setCategory] = useState(initialCategory);
   const [status, setStatus] = useState(initialStatus);
   const [{ mode, skipEmpty }, setPreferences] = useState(readPreferences);
@@ -48,7 +50,8 @@ export default function PrintDialog({ project, outline, categoryById, initialCat
   const unanswered = candidates.filter(entry => !entry.node.answer.trim()).length;
   const unemphasized = candidates.filter(entry => entry.node.answer.trim() && !entry.keywordLines.length).length;
   const fileName = useRef('');
-  fileName.current = printFileName(project.company, project.role, category, mode);
+  fileName.current = printFileName(project.company, project.role, category, mode, stage);
+  const stageLabel = stage ? INTERVIEW_STAGES.find(option => option.id === stage)?.label : undefined;
 
   useEffect(() => {
     try { localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ mode, skipEmpty })); } catch { /* Printing works without remembered preferences. */ }
@@ -74,8 +77,8 @@ export default function PrintDialog({ project, outline, categoryById, initialCat
   }
 
   // The preview and the print copy share one element, so unrelated app re-renders skip both.
-  const sheet = useMemo(() => <PrintSheet company={project.company} role={project.role} entries={entries} scope={{ category, status }} mode={mode} printedAt={printedAt} />,
-    [project.company, project.role, entries, category, status, mode, printedAt]);
+  const sheet = useMemo(() => <PrintSheet company={project.company} role={project.role} stage={stage} entries={entries} scope={{ category, status }} mode={mode} printedAt={printedAt} />,
+    [project.company, project.role, stage, entries, category, status, mode, printedAt]);
   const excluded = candidates.length - entries.length;
   return <div className="print-dialog">
     <section className="print-settings" aria-label="인쇄 설정">
@@ -118,7 +121,7 @@ export default function PrintDialog({ project, outline, categoryById, initialCat
       <p className="print-hint">인쇄 창의 대상에서 <strong>PDF로 저장</strong>을 고르면 파일로 저장돼요. <strong>머리글과 바닥글</strong>을 해제하면 더 깔끔해요.</p>
     </section>
     <div className="print-preview" role="region" aria-label="인쇄 미리보기" tabIndex={0}>
-      <p className="print-preview-caption">미리보기 · A4 세로 · 여백 10mm</p>
+      <p className="print-preview-caption">{stageLabel && `${stageLabel} · `}미리보기 · A4 세로 · 여백 10mm</p>
       {sheet}
     </div>
     {createPortal(<div className="print-root">{sheet}</div>, document.body)}

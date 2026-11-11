@@ -1,7 +1,8 @@
-import type { InterviewNode, QuestionCategory, QuestionCategoryFilter, TextFormatting } from '../types';
+import type { InterviewNode, InterviewStage, QuestionCategory, QuestionCategoryFilter, TextFormatting } from '../types';
 import type { QuestionOutlineEntry } from './tree';
 import { QUESTION_CATEGORIES } from './questionCategories';
 import { validateTextFormatting } from './textFormatting';
+import { INTERVIEW_STAGES } from './interviewStages';
 
 export type PrintAnswerMode = 'full' | 'keywords';
 export type PrintStatusFilter = 'all' | InterviewNode['status'];
@@ -121,9 +122,10 @@ export function hasPrintableAnswer(entry: PrintEntry, mode: PrintAnswerMode): bo
 }
 
 /** Browsers suggest the document title as the PDF file name. */
-export function printFileName(company: string, role: string, category: QuestionCategoryFilter, mode: PrintAnswerMode): string {
+export function printFileName(company: string, role: string, category: QuestionCategoryFilter, mode: PrintAnswerMode, stage?: InterviewStage): string {
   const scope = category === 'all' ? [] : [PRINT_CATEGORY_OPTIONS.find(option => option.id === category)?.label ?? ''];
-  return [company, role, ...scope, mode === 'keywords' ? '면접키워드' : '면접스크립트']
+  const stageLabel = stage ? INTERVIEW_STAGES.find(option => option.id === stage)?.label : undefined;
+  return [company, role, stageLabel ?? '', ...scope, mode === 'keywords' ? '면접키워드' : '면접스크립트']
     .map(part => part.replace(/[\\/:*?"<>|]+/gu, ' ').replace(/\s+/gu, ' ').trim())
     .filter(Boolean)
     .join('_');

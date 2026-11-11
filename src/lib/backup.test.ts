@@ -3,6 +3,7 @@ import { createDemoProject } from './demo';
 import { MAX_BACKUP_BYTES, parseProjectBackup, serializeProject } from './backup';
 import { createNode, createProject } from './tree';
 import { getQuestionCategories } from './questionCategories';
+import { copyQuestionsToStage, getStageNodes } from './interviewStages';
 
 function backup(edit?: (project: ReturnType<typeof createDemoProject>) => void): string {
   const project = createDemoProject();
@@ -11,6 +12,42 @@ function backup(edit?: (project: ReturnType<typeof createDemoProject>) => void):
 }
 
 describe('project backups', () => {
+  it('preserves both interview stages and remaps the independent copied trees', () => {
+    const original = createDemoProject();
+    original.nodes[0].category = 'basic';
+    original.nodes[0].answerFormatting = [{ start: 0, end: 3, bold: true }];
+    original.nodes = copyQuestionsToStage(original.nodes, 'first', 'second', new Set(['demo-q1', 'demo-q2', 'demo-q4']));
+    const restored = parseProjectBackup(serializeProject(original));
+    expect(restored.nodes).toHaveLength(9);
+    const first = getStageNodes(restored.nodes, 'first');
+    const second = getStageNodes(restored.nodes, 'second');
+    expect(first).toHaveLength(6);
+    expect(first.every(entry => entry.stage === undefined)).toBe(true);
+    expect(second).toHaveLength(3);
+    expect(second[0].parentId).toBeNull();
+    expect(second[1].parentId).toBe(second[0].id);
+    expect(second[2].parentId).toBeNull();
+    expect(second[0].id).not.toBe(first[0].id);
+    expect(second[0].answerFormatting).toEqual(first[0].answerFormatting);
+    expect(second.map(entry => entry.category)).toEqual(['basic', 'basic', 'basic']);
+    expect(second.map(entry => entry.answer)).toEqual([original.nodes[0].answer, original.nodes[1].answer, original.nodes[3].answer]);
+  });
+
+  it('rejects invalid stages and cross-stage parent links in imports and exports', () => {
+    for (const stage of [null, '', 'all', 'third', true, 1, {}]) {
+      const project = createDemoProject(); Object.assign(project.nodes[0], { stage });
+      expect(() => serializeProject(project)).toThrow('차수');
+      expect(() => parseProjectBackup(JSON.stringify({ schemaVersion: 1, project }))).toThrow('차수');
+    }
+    const project = createDemoProject();
+    project.nodes[1].stage = 'second';
+    expect(() => serializeProject(project)).toThrow('서로 다른 면접 차수');
+    expect(() => parseProjectBackup(JSON.stringify({ schemaVersion: 1, project }))).toThrow('서로 다른 면접 차수');
+    expect(parseProjectBackup(backup()).nodes.every(entry => entry.stage === undefined)).toBe(true);
+    project.nodes.forEach(entry => { entry.stage = 'first'; });
+    expect(() => serializeProject(project)).not.toThrow();
+  });
+
   it('round-trips all preparation content and remaps IDs without altering the source', () => {
     const original = createDemoProject();
     const text = serializeProject(original);

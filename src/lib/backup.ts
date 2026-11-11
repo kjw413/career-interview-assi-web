@@ -2,9 +2,10 @@ import type { InterviewNode, Project, ResumeData } from '../types';
 import { validateTextFormatting } from './textFormatting';
 import { validateAnswerStylePresets } from './answerStylePresets';
 import { isQuestionCategory } from './questionCategories';
+import { getQuestionStage, isInterviewStage, MAX_INTERVIEW_QUESTIONS } from './interviewStages';
 
 export const MAX_BACKUP_BYTES = 5 * 1024 * 1024;
-const MAX_NODES = 2_000;
+const MAX_NODES = MAX_INTERVIEW_QUESTIONS;
 
 function invalid(detail: string): never {
   throw new Error(`백업 파일을 불러올 수 없습니다. ${detail}`);
@@ -47,7 +48,7 @@ function validateResume(value: unknown): ResumeData | null {
 
 function validateNode(value: unknown): InterviewNode {
   // Accept the retired field in existing v1 backups, but omit it from new exports.
-  const source = record(value, '질문', ['id', 'parentId', 'anchor', 'question', 'answer', 'category', 'questionFormatting', 'answerFormatting', 'interviewer', 'status', 'position']);
+  const source = record(value, '질문', ['id', 'parentId', 'anchor', 'question', 'answer', 'category', 'stage', 'questionFormatting', 'answerFormatting', 'interviewer', 'status', 'position']);
   const status = source.status;
   if (status !== 'draft' && status !== 'ready') invalid('질문의 작성 상태가 올바르지 않습니다.');
   const node: InterviewNode = {
@@ -61,6 +62,10 @@ function validateNode(value: unknown): InterviewNode {
   if (source.category !== undefined) {
     if (!isQuestionCategory(source.category)) invalid('질문의 분류가 올바르지 않습니다.');
     node.category = source.category;
+  }
+  if (source.stage !== undefined) {
+    if (!isInterviewStage(source.stage)) invalid('질문의 면접 차수가 올바르지 않습니다.');
+    node.stage = source.stage;
   }
   if (source.position !== undefined) {
     const position = record(source.position, '질문 위치', ['x', 'y']);
@@ -89,6 +94,9 @@ function validateProject(value: unknown): Project {
   }
   for (const node of nodes) {
     if (node.parentId !== null && !byId.has(node.parentId)) invalid('연결 대상이 없는 꼬리질문이 있습니다.');
+    if (node.parentId !== null && getQuestionStage(node) !== getQuestionStage(byId.get(node.parentId)!)) {
+      invalid('서로 다른 면접 차수의 질문은 연결할 수 없습니다.');
+    }
   }
   const completed = new Set<string>();
   for (const node of nodes) {

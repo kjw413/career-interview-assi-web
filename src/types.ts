@@ -26,6 +26,7 @@ export interface AnswerStylePreset {
 /** Keep basic as the stored ID for required questions so existing content stays in place. */
 export type QuestionCategory = 'basic' | 'situational' | 'fundamentals' | 'resume';
 export type QuestionCategoryFilter = 'all' | QuestionCategory;
+export type InterviewStage = 'first' | 'second';
 
 export interface InterviewNode {
   id: string;
@@ -34,8 +35,10 @@ export interface InterviewNode {
   anchor: string;
   question: string;
   answer: string;
-  /** Omitted by legacy data; the root question's category applies to its whole flow. */
+  /** Omitted by legacy data; inherit the nearest parent's category or use resume. */
   category?: QuestionCategory;
+  /** Existing questions without this field belong to the first interview. */
+  stage?: InterviewStage;
   /** Legacy backup compatibility; questions are displayed and edited as plain text. */
   questionFormatting?: TextFormatting[];
   answerFormatting?: TextFormatting[];

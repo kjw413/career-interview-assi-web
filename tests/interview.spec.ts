@@ -1147,7 +1147,7 @@ test('prints full answer scripts or only emphasized keywords on A4 and names the
     window.print = () => { record.printedTitles.push(document.title); window.dispatchEvent(new Event('afterprint')); };
   });
   await dialog.getByRole('button', { name: 'PDF로 인쇄', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => (window as unknown as { printedTitles: string[] }).printedTitles)).toEqual(['토스_프론트엔드 개발자_면접키워드']);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { printedTitles: string[] }).printedTitles)).toEqual(['토스_프론트엔드 개발자_1차(직무)_면접키워드']);
   await expect(page).toHaveTitle('folio — 나를 더 잘 말하는 준비');
 
   await page.emulateMedia({ media: 'print' });
@@ -1209,4 +1209,145 @@ test('prints a long answer across A4 pages inside the narrow margins without cut
     '테스트 결과에 영향을 줄 수 있는 변수는 어떻게 통제했나요?', '디자인 시스템을 구축하며 팀과 어떻게 협업했나요?', '바이브 코딩으로 실제 문제를 해결한 경험을 이야기해 주세요.']) {
     expect(text).toContain(squash(question));
   }
+});
+
+async function interviewStage(page: Page, label: '1차(직무)' | '2차(임원)') {
+  await page.getByRole('tablist', { name: '면접 차수', exact: true }).getByRole('tab', { name: label, exact: true }).click();
+}
+
+async function copyInterviewQuestions(page: Page, questions: string[]) {
+  await page.getByRole('button', { name: '2차(임원)으로 질문 복사', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '복사할 질문 선택', exact: true });
+  for (const question of questions) await dialog.getByRole('checkbox', { name: question, exact: true }).check();
+  await dialog.getByRole('button', { name: '선택한 질문 복사', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('tablist', { name: '면접 차수', exact: true }).getByRole('tab', { name: '2차(임원)', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await saved(page);
+}
+
+test('copies exactly selected interview questions into an independent second-stage tree and retains both stages in backups', async ({ page }) => {
+  const stages = page.getByRole('tablist', { name: '면접 차수', exact: true });
+  await expect(stages.getByRole('tab', { name: '1차(직무)', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await interviewStage(page, '2차(임원)');
+  await questionList(page);
+  await expect(page.locator('.question-list-item')).toHaveCount(0);
+  await interviewStage(page, '1차(직무)');
+  const fixture = JSON.parse(await downloadBackup(page));
+  fixture.project.nodes[0].category = 'basic';
+  fixture.project.nodes[1].category = 'situational';
+  fixture.project.nodes[0].answerFormatting = [{ start: 0, end: 3, bold: true, backgroundColor: '#fff1a8' }];
+  fixture.project.nodes[0].position = { x: 125, y: 210 };
+  await page.getByLabel('면접 백업 파일', { exact: true }).setInputFiles({ name: 'legacy-first-interview.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture)) });
+  await saved(page);
+  const before = JSON.parse(await downloadBackup(page)).project;
+  expect(before.nodes.every((node: InterviewNode) => node.stage === undefined)).toBe(true);
+  await copyInterviewQuestions(page, [
+    '1-1 온보딩에서 어떤 문제를 발견했고, 어떻게 개선했나요?',
+    '1-2 사용자 인터뷰는 어떤 방식으로 진행했나요?',
+    '1-4 테스트 결과에 영향을 줄 수 있는 변수는 어떻게 통제했나요?',
+  ]);
+  await questionList(page);
+  await expect(page.locator('.question-list-item')).toHaveCount(3);
+  await expect(page.locator('.question-list-item .list-number')).toHaveText(['1-1', '1-2', '2-1']);
+  const copied = JSON.parse(await downloadBackup(page)).project;
+  const first = copied.nodes.filter((node: InterviewNode) => node.stage !== 'second');
+  const second = copied.nodes.filter((node: InterviewNode) => node.stage === 'second') as InterviewNode[];
+  expect(first).toEqual(before.nodes);
+  expect(second).toHaveLength(3);
+  expect(second.map(node => node.question)).toEqual([before.nodes[0].question, before.nodes[1].question, before.nodes[3].question]);
+  expect(second.map(node => node.parentId)).toEqual([null, second[0].id, null]);
+  expect(second.map(node => node.category)).toEqual(['basic', 'situational', 'basic']);
+  expect(second[0].answerFormatting).toEqual(before.nodes[0].answerFormatting);
+  expect(second[0].status).toBe(before.nodes[0].status);
+  expect(second.every(node => !before.nodes.some((source: InterviewNode) => source.id === node.id))).toBe(true);
+
+  await openQuestion(page, second[0].question);
+  await fillQuestion(page, '임원 면접에서 설명할 개선 성과는?', '복잡한 가입 과정을 줄여 고객이 더 쉽게 시작하도록 했습니다.');
+  await closeEditor(page);
+  await openQuestion(page, second[1].question);
+  await editor(page).getByRole('button', { name: '질문과 하위 질문 삭제', exact: true }).click();
+  await page.getByRole('dialog', { name: '이 질문을 삭제할까요?', exact: true }).getByRole('button', { name: '질문 삭제', exact: true }).click();
+  await saved(page);
+  await expect(page.locator('.question-list-item')).toHaveCount(2);
+  await interviewStage(page, '1차(직무)');
+  await expect(page.locator('.question-list-item')).toHaveCount(6);
+  const updated = JSON.parse(await downloadBackup(page)).project;
+  expect(updated.nodes.filter((node: InterviewNode) => node.stage !== 'second')).toEqual(before.nodes);
+  const backup = await downloadBackup(page);
+  await page.reload();
+  await interviewStage(page, '2차(임원)');
+  await questionList(page);
+  await expect(page.locator('.question-list-item')).toHaveCount(2);
+  await expect(page.locator('.list-question-open').filter({ hasText: '임원 면접에서 설명할 개선 성과는?' })).toBeVisible();
+  await page.getByLabel('면접 백업 파일', { exact: true }).setInputFiles({ name: 'both-interviews.json', mimeType: 'application/json', buffer: Buffer.from(backup) });
+  await interviewStage(page, '2차(임원)');
+  await expect(page.locator('.question-list-item')).toHaveCount(2);
+  await page.getByRole('tab', { name: '마인드맵', exact: true }).click();
+  await expect(page.locator('.react-flow__node-question')).toHaveCount(2);
+  await expect(page.locator('.react-flow__edge')).toHaveCount(2);
+  await interviewStage(page, '1차(직무)');
+  await expect(page.locator('.react-flow__node-question')).toHaveCount(6);
+});
+
+test('uses existing editing, alignment and printing within the selected interview stage on mobile', async ({ page }) => {
+  const before = JSON.parse(await downloadBackup(page)).project;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await interviewStage(page, '2차(임원)');
+  await questionCategory(page, '필수질문');
+  await page.getByRole('button', { name: '질문 추가', exact: true }).click();
+  await fillQuestion(page, '우리 회사에서 어떤 가치를 만들고 싶나요?', '고객이 이해하기 쉬운 서비스를 만들고 싶습니다.');
+  await selectAnswerText(page, '고객이 이해하기 쉬운');
+  await fillQuestion(page, '어떻게 고객의 이해를 확인하겠어요?', '직접 사용해 본 고객의 의견을 듣겠습니다.');
+  await closeEditor(page);
+  await page.getByRole('button', { name: '마인드맵 자동정렬', exact: true }).click();
+  await saved(page);
+  const snapshot = JSON.parse(await downloadBackup(page)).project;
+  expect(snapshot.nodes.filter((node: InterviewNode) => node.stage !== 'second')).toEqual(before.nodes);
+  const second = snapshot.nodes.filter((node: InterviewNode) => node.stage === 'second') as InterviewNode[];
+  expect(second).toHaveLength(2);
+  expect(second.every(node => node.category === 'basic')).toBe(true);
+  expect(second[1].parentId).toBe(second[0].id);
+  expect(second[1].position?.x).toBeGreaterThan(second[0].position!.x);
+  await questionList(page);
+  await expect(page.locator('.question-list-item')).toHaveCount(2);
+  await questionCategory(page, '전체 질문');
+  await page.getByRole('button', { name: 'PDF 인쇄', exact: true }).click();
+  const print = page.getByRole('dialog', { name: '질문·답변 인쇄', exact: true });
+  await expect(print.locator('.print-item')).toHaveCount(2);
+  await expect(print.getByRole('region', { name: '인쇄 미리보기', exact: true })).toContainText('2차(임원)');
+  await expect(print.getByRole('region', { name: '인쇄 미리보기', exact: true })).not.toContainText('온보딩에서 어떤 문제를 발견했고');
+  await page.evaluate(() => {
+    const target = window as unknown as { stagePrintedTitle: string };
+    window.print = () => { target.stagePrintedTitle = document.title; window.dispatchEvent(new Event('afterprint')); };
+  });
+  await print.getByRole('button', { name: 'PDF로 인쇄', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { stagePrintedTitle: string }).stagePrintedTitle)).toContain('2차(임원)');
+  await page.keyboard.press('Escape');
+  await expect(print).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await interviewStage(page, '1차(직무)');
+  await expect(page.locator('.question-list-item')).toHaveCount(6);
+  await page.getByRole('button', { name: '2차(임원)으로 질문 복사', exact: true }).click();
+  const copy = page.getByRole('dialog', { name: '복사할 질문 선택', exact: true });
+  await expect(copy.getByRole('button', { name: '선택한 질문 복사', exact: true })).toBeDisabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.keyboard.press('Escape');
+  await expect(copy).toBeHidden();
+});
+
+test('replacing the resume removes only the uploading stage resume questions and preserves the other interview stage', async ({ page }) => {
+  await copyInterviewQuestions(page, ['1-1 온보딩에서 어떤 문제를 발견했고, 어떻게 개선했나요?', '1-2 사용자 인터뷰는 어떤 방식으로 진행했나요?']);
+  const before = JSON.parse(await downloadBackup(page)).project;
+  const second = before.nodes.filter((node: InterviewNode) => node.stage === 'second');
+  await interviewStage(page, '1차(직무)');
+  await page.getByLabel('이력서 PDF 파일', { exact: true }).setInputFiles({ name: 'first-stage-resume.pdf', mimeType: 'application/pdf', buffer: resumePdf() });
+  await page.getByRole('dialog', { name: '이력서를 교체할까요?', exact: true }).getByRole('button', { name: '교체하기', exact: true }).click();
+  await expect(page.getByLabel('이력서 텍스트. 문구를 선택하면 질문을 추가할 수 있습니다.')).toContainText('Alex Kim');
+  await saved(page);
+  const after = JSON.parse(await downloadBackup(page)).project;
+  expect(after.nodes.filter((node: InterviewNode) => node.stage !== 'second')).toHaveLength(0);
+  expect(after.nodes.filter((node: InterviewNode) => node.stage === 'second')).toEqual(second);
+  await interviewStage(page, '2차(임원)');
+  await questionList(page);
+  await expect(page.locator('.question-list-item')).toHaveCount(2);
 });

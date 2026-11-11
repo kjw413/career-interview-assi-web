@@ -108,4 +108,9 @@ describe('print file name', () => {
     expect(printFileName('토스', '프론트엔드 개발자', 'all', 'full')).toBe('토스_프론트엔드 개발자_면접스크립트');
     expect(printFileName('A/B 컴퍼니', 'R&D: 엔지니어', 'situational', 'keywords')).toBe('A B 컴퍼니_R&D 엔지니어_상황·가치관_면접키워드');
   });
+
+  it('distinguishes interview stages in exported PDF names when a stage is supplied', () => {
+    expect(printFileName('토스', '프론트엔드 개발자', 'all', 'full', 'first')).toBe('토스_프론트엔드 개발자_1차(직무)_면접스크립트');
+    expect(printFileName('토스', '프론트엔드 개발자', 'fundamentals', 'keywords', 'second')).toBe('토스_프론트엔드 개발자_2차(임원)_전공·직무_면접키워드');
+  });
 });
