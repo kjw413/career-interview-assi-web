@@ -51,6 +51,14 @@ export function setQuestionCategory(nodes: InterviewNode[], id: string, category
   return preserveLegacyCategories(changed, previous);
 }
 
+/** Make a follow-up independent without changing the categories or links below it. */
+export function detachQuestion(nodes: InterviewNode[], id: string, parentId: string): InterviewNode[] {
+  const selected = nodes.find(node => node.id === id && node.parentId === parentId);
+  if (!selected) return nodes;
+  const detached = nodes.map(node => node === selected ? { ...node, parentId: null, anchor: '' } : node);
+  return preserveLegacyCategories(detached, getQuestionCategories(nodes));
+}
+
 /** Remove one category without deleting differently categorized follow-up questions. */
 export function removeQuestionCategory(nodes: InterviewNode[], category: QuestionCategory): InterviewNode[] {
   if (!isQuestionCategory(category)) return nodes;

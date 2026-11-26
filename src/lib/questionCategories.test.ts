@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { InterviewNode, QuestionCategory } from '../types';
 import { createNode } from './tree';
-import { getQuestionCategories, QUESTION_CATEGORIES, removeQuestionCategory, setQuestionCategory } from './questionCategories';
+import { detachQuestion, getQuestionCategories, QUESTION_CATEGORIES, removeQuestionCategory, setQuestionCategory } from './questionCategories';
 
 function node(id: string, parentId: string | null = null, category: QuestionCategory = 'resume'): InterviewNode {
   return { ...createNode(parentId, id, category), id };
@@ -73,6 +73,22 @@ describe('question categories', () => {
     expect(setQuestionCategory(changed, 'child', 'basic')).toBe(changed);
     expect(setQuestionCategory(nodes, 'missing', 'basic')).toBe(nodes);
     expect(setQuestionCategory(nodes, 'child', 'unknown' as QuestionCategory)).toBe(nodes);
+  });
+
+  it('detaches only the requested parent link and preserves inherited categories and preparation content', () => {
+    const child: InterviewNode = {
+      ...legacy('child', 'root'), question: '어떤 지표를 사용했나요?', answer: '완료율을 확인했습니다.',
+      answerFormatting: [{ start: 0, end: 3, bold: true }], status: 'ready', position: { x: 450, y: 100 },
+    };
+    const nodes = [node('root', null, 'basic'), child, legacy('grandchild', 'child'), legacy('sibling', 'root')];
+    const detached = detachQuestion(nodes, 'child', 'root');
+    expect(detached[1]).toEqual({ ...child, parentId: null, anchor: '', category: 'basic' });
+    expect(detached[0]).toBe(nodes[0]);
+    expect(detached[2]).toBe(nodes[2]);
+    expect(detached[3]).toBe(nodes[3]);
+    expect(getQuestionCategories(detached)).toEqual(getQuestionCategories(nodes));
+    expect(detachQuestion(nodes, 'child', 'stale-parent')).toBe(nodes);
+    expect(detachQuestion(detached, 'child', 'root')).toBe(detached);
   });
 
   it('recovers invalid legacy fields, orphaned nodes and cycles without changing unrelated questions', () => {

@@ -209,6 +209,17 @@ test('syncs independent question categories across browsers while preserving leg
     await expect(page.locator('.question-list-item')).toHaveCount(1);
     await expect(page.locator('[data-question-id="demo-q3"] .list-number')).toHaveText('1-3');
     await expect(page.locator('[data-question-id="demo-q3"] .list-parent-link')).toHaveText('부모 1-1 · 필수질문');
+
+    await second.getByRole('button', { name: '부모 질문과 분리', exact: true }).click();
+    const detach = second.getByRole('dialog', { name: '부모 질문과 분리할까요?', exact: true });
+    await detach.getByRole('button', { name: '독립 질문으로 분리', exact: true }).click();
+    const detachedNodes = (manuallyClassified.data.nodes as typeof project.nodes).map(node =>
+      node.id === 'demo-q3' ? { ...node, parentId: null, anchor: '' } : node,
+    );
+    await expect.poll(() => backend.rows.get(key)?.data.nodes).toEqual(detachedNodes);
+    await page.getByRole('button', { name: '최신 내용 불러오기', exact: true }).click();
+    await expect(page.locator('[data-question-id="demo-q3"] .list-number')).toHaveText('2-1');
+    await expect(page.locator('[data-question-id="demo-q3"] .list-parent-link')).toHaveCount(0);
   } finally { await laptop.close(); }
 });
 

@@ -9,7 +9,11 @@
 .editor-close{display:flex;align-items:center;justify-content:center;border:none;background:#f5f7f3;color:#77867c;cursor:pointer;height:31px;width:31px;border-radius:50%;transition:background .15s}
 .editor-close:hover{background:#e9eee6;color:#244b3e}
 .editor-question-nav{display:flex;flex-direction:column;flex-shrink:0;min-height:0;max-height:30%;padding:12px 23px;border-bottom:1px solid #e8eee3;background:#fafcf7}
-.editor-question-nav h3{flex-shrink:0;margin:0 0 8px;font-size:14px;font-weight:650;line-height:1.5;color:#536b50}
+.editor-question-nav-heading{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px;margin-bottom:8px}
+.editor-question-nav h3{margin:0;font-size:14px;font-weight:650;line-height:1.5;color:#536b50}
+.editor-detach{display:inline-flex;align-items:center;gap:5px;min-height:32px;padding:4px 8px;border:1px solid #dfe7d9;border-radius:7px;background:#fff;color:#42633f;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer}
+.editor-detach:hover{background:#edf5e6;border-color:#a9c39b}
+.editor-detach:focus-visible{outline:2px solid #5b8a68;outline-offset:2px}
 .editor-question-nav-links{display:grid;gap:6px;min-height:0;max-height:132px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#d5e1cd transparent}
 .editor-question-nav-button{font:inherit;display:flex;align-items:center;gap:10px;min-width:0;width:100%;padding:8px 10px;border:1px solid #dfe7d9;border-radius:8px;background:#fff;color:#42633f;text-align:left;cursor:pointer;transition:background .15s,border-color .15s}
 .editor-question-nav-button:hover{background:#edf5e6;border-color:#a9c39b}

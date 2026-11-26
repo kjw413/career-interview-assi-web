@@ -399,6 +399,40 @@ test('navigates parent and sibling branches from filtered questions and preserve
   await expect(editor(page).getByLabel('나의 답변', { exact: true })).toHaveText('질문 사이를 이동하기 직전에 수정한 답변입니다.');
 });
 
+test('detaches a follow-up into an independent question and saves its own follow-up links', async ({ page }) => {
+  const question = '어떤 지표로 개선 효과를 검증했나요?';
+  await openQuestion(page, question);
+  const detach = editor(page).getByRole('button', { name: '부모 질문과 분리', exact: true });
+  const confirm = page.getByRole('dialog', { name: '부모 질문과 분리할까요?', exact: true });
+  await detach.click();
+  await confirm.getByRole('button', { name: '취소', exact: true }).click();
+  await expect(detach).toBeFocused();
+  await expect(editor(page).locator('.editor-question-label')).toHaveText('1-3');
+
+  await detach.click();
+  await confirm.getByRole('button', { name: '독립 질문으로 분리', exact: true }).click();
+  await expect(confirm).toBeHidden();
+  await expect(detach).toHaveCount(0);
+  await expect(editor(page).locator('.editor-question-label')).toHaveText('2-1');
+  await expect(editor(page).getByLabel('예상 질문', { exact: true })).toHaveValue(question);
+  await expect(editor(page).getByLabel('나의 답변', { exact: true })).toContainText('완료율이 24% 개선');
+  await expect(editor(page).getByLabel('연결된 키워드', { exact: true })).toHaveValue('');
+  await expect(editor(page).getByRole('button', { name: /^꼬리질문 2-2:/ })).toBeVisible();
+  await saved(page);
+  await page.reload();
+  await questionList(page);
+  await expect(page.locator('.question-list-item .list-number')).toHaveText(['1-1', '1-2', '2-1', '2-2', '3-1', '4-1']);
+  await expect(page.locator('[data-question-id="demo-q4"] .list-question-path')).toHaveAttribute('aria-label', '연결 흐름 2-1 → 2-2');
+  const backup = JSON.parse(await downloadBackup(page)).project.nodes as InterviewNode[];
+  expect(backup.find(node => node.id === 'demo-q3')).toMatchObject({ parentId: null, anchor: '', status: 'ready' });
+  expect(backup.find(node => node.id === 'demo-q4')?.parentId).toBe('demo-q3');
+  await page.getByRole('tab', { name: '마인드맵', exact: true }).click();
+  const mapQuestion = page.getByRole('group', { name: `질문 2-1: ${question}`, exact: true });
+  await expect(mapQuestion).toBeAttached();
+  await expect(mapQuestion.getByRole('button', { name: /^부모 질문/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '부모 질문 2-1로 이동 · 자소서기반', exact: true })).toBeAttached();
+});
+
 test('keeps the expanded popup open while navigating linked questions on desktop and mobile', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('button', { name: '작업 영역 전체화면', exact: true }).click();
@@ -547,7 +581,7 @@ test('keeps keyword emphasis across reload and backups while search, counts and 
   await selectAnswerText(page, '핵심 키워드로 경험');
   await expect(editor(page).getByLabel('연결된 키워드', { exact: true })).toHaveValue('핵심 키워드로 경험');
   await expect(field()).toHaveText('');
-  await editor(page).getByRole('button', { name: /^부모 질문/ }).click();
+  await editor(page).getByRole('button', { name: /^부모 질문 \d+-\d+:/ }).click();
   await expect(field()).toHaveText(answer);
   await expect(highlighted()).toHaveCSS('background-color', 'rgb(255, 241, 168)');
 });

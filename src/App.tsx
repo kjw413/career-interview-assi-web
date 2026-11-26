@@ -3,7 +3,7 @@ import {
   ArrowDownToLine, ArrowRight, ArrowUpRight, BookOpen, Check, CheckCheck,
   CheckCircle2, ChevronDown, ChevronRight, CircleHelp, FileText, FolderOpen, GitBranch,
   LogOut, RefreshCw, LayoutGrid, List, LoaderCircle, LockKeyhole, MoreHorizontal, PanelLeftClose,
-  PanelLeftOpen, Plus, Printer, Search, Settings2, Sparkles, Trash2, Upload, X, Maximize2, Minimize2,
+  PanelLeftOpen, Plus, Printer, Search, Settings2, Sparkles, Trash2, Unlink2, Upload, X, Maximize2, Minimize2,
 } from 'lucide-react';
 import type { InterviewNode, InterviewStage, Project, QuestionCategory, QuestionCategoryFilter } from './types';
 import { createNode, createProject, getQuestionOutline, getStats, getSubtreeIds, reorderQuestionBranch } from './lib/tree';
@@ -19,10 +19,10 @@ import QuestionCategories from './components/QuestionCategories';
 import PrintDialog from './components/PrintDialog';
 import InterviewStages from './components/InterviewStages';
 import { copyQuestionsToStage, getStageNodes, replaceStageNodes } from './lib/interviewStages';
-import { getQuestionCategories, removeQuestionCategory, setQuestionCategory } from './lib/questionCategories';
+import { detachQuestion, getQuestionCategories, removeQuestionCategory, setQuestionCategory } from './lib/questionCategories';
 
 const EMPTY_PROJECTS: Project[] = [];
-type Confirm = { title: string; description: string; action: () => void; label?: string };
+type Confirm = { title: string; description: string; action: () => void; label?: string; kind?: 'detach' };
 type Selection = { text: string; x: number; y: number };
 
 function download(name: string, blob: Blob) {
@@ -377,6 +377,29 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
   const selectedEntry = selectedId ? outlineById.get(selectedId) : undefined;
   const selectedParent = selectedEntry?.parentId ? outlineById.get(selectedEntry.parentId) : undefined;
   const childQuestions = questionOutline.filter((entry) => entry.parentId === selectedId);
+  function requestDetach() {
+    if (!active || !selected || !selectedParent) return;
+    const projectId = active.id;
+    const questionId = selected.id;
+    const parentId = selectedParent.node.id;
+    setConfirm({
+      title: '부모 질문과 분리할까요?',
+      description: '이 질문이 독립 질문이 됩니다. 질문과 답변, 이 질문에 달린 꼬리질문은 보존되고 부모 답변의 연결 키워드는 지워집니다.',
+      label: '독립 질문으로 분리',
+      kind: 'detach',
+      action: () => {
+        setConfirm(null);
+        const current = projectsRef.current.find(project => project.id === projectId);
+        if (!current) return;
+        const currentNodes = getStageNodes(current.nodes, stage);
+        const nodes = detachQuestion(currentNodes, questionId, parentId);
+        if (nodes === currentNodes) return;
+        updateProject(projectId, { nodes });
+        setToast('독립 질문으로 분리했습니다.');
+        requestAnimationFrame(() => document.getElementById('editor-question')?.focus());
+      },
+    });
+  }
   function reorderQuestions(sourceId: string, targetId: string, placement: 'before' | 'after') {
     if (categoryFilter !== 'all' || filter !== 'all' || search.trim()) return;
     const current = projectsRef.current.find((project) => project.id === activeId);
@@ -418,7 +441,7 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
     category={categoryById.get(selected.id) ?? 'resume'} categoryById={categoryById} onCategoryChange={changeQuestionCategory}
     stylePresets={active?.answerStylePresets ?? []} onStylePresetsChange={(answerStylePresets) => { if (active) updateProject(active.id, { answerStylePresets }); }}
     onNavigate={navigateQuestion} onChange={updateNode} onClose={() => setSelectedId(null)}
-    onAddChild={(anchor) => addQuestion(selected.id, anchor)} onDelete={deleteBranch} />;
+    onAddChild={(anchor) => addQuestion(selected.id, anchor)} onDetach={requestDetach} onDelete={deleteBranch} />;
 
   const saveIndicator = <button className={`save-state ${saveStatus === 'error' ? 'save-error' : ''}`} disabled={saveStatus !== 'error'} onClick={() => { for (const id of saveErrors.current) { const project = projectsRef.current.find((item) => item.id === id); if (project) persist(project); } }} aria-label={saveStatus === 'error' ? '저장 실패, 다시 시도' : saveStatus === 'saving' ? '저장 중' : '모든 변경사항 저장됨'}>{saveStatus === 'saving' ? <LoaderCircle size={13} className="spin" /> : saveStatus === 'error' ? <CircleHelp size={13} /> : <CheckCheck size={14} />}{saveStatus === 'saving' ? '저장 중' : saveStatus === 'error' ? '저장 실패 · 다시 시도' : '모든 변경사항 저장됨'}</button>;
 
@@ -470,7 +493,11 @@ function Workspace({ store, email, onSignOut }: { store: ProjectStore; email?: s
     {manualResumeOpen && active && <Modal onClose={() => setManualResumeOpen(false)} title="이력서 텍스트 입력" wide><p className="eyebrow">YOUR STORY STARTS HERE</p><h2>이력서 내용을 직접 입력하세요</h2><p className="modal-description">이력서 전체를 붙여 넣어도 좋아요. 입력한 문구에서 질문을 연결할 수 있습니다.</p><label className="form-label" htmlFor="manual-resume">이력서 내용</label><textarea id="manual-resume" className="manual-resume-text" value={resumeDraft} onChange={(e) => setResumeDraft(e.target.value)} maxLength={1000000} placeholder="경력, 프로젝트, 학력, 특기사항 등을 입력해 주세요." /><button className="button button-primary form-submit" disabled={!resumeDraft.trim()} onClick={() => { updateProject(active.id, { resume: { name: '직접 입력한 이력서', text: resumeDraft.trim(), pages: 1, usedOcr: false } }); setManualResumeOpen(false); setToast('이력서를 저장했습니다. 문구를 선택해 질문을 연결해 보세요.'); }}>이력서 저장<ArrowRight size={16} /></button></Modal>}
     {projectForm && <ProjectForm project={projectForm === 'edit' ? active ?? undefined : undefined} onClose={() => setProjectForm(null)} onSubmit={(company, role) => { if (projectForm === 'edit' && active) { updateProject(active.id, { company, role }); setProjectForm(null); } else addProject(createProject(company, role)); }} />}
     {printOpen && active && <Modal onClose={() => setPrintOpen(false)} title="질문·답변 인쇄" className="print-modal" initialFocus="#print-category"><PrintDialog stage={stage} project={active} outline={questionOutline} categoryById={categoryById} initialCategory={categoryFilter} initialStatus={filter} /></Modal>}
-    {confirm && <Modal onClose={() => setConfirm(null)} title={confirm.title}><div className="modal-symbol danger-symbol"><Trash2 size={24} /></div><h2>{confirm.title}</h2><p className="modal-description">{confirm.description}</p><div className="confirm-actions"><button className="button button-outline" onClick={() => setConfirm(null)}>취소</button><button className="button button-danger" onClick={confirm.action}>{confirm.label ?? '삭제'}</button></div></Modal>}
+    {confirm && <Modal onClose={() => setConfirm(null)} title={confirm.title}>
+      <div className={`modal-symbol${confirm.kind === 'detach' ? '' : ' danger-symbol'}`}>{confirm.kind === 'detach' ? <Unlink2 size={24} /> : <Trash2 size={24} />}</div>
+      <h2>{confirm.title}</h2><p className="modal-description">{confirm.description}</p>
+      <div className="confirm-actions"><button className="button button-outline" onClick={() => setConfirm(null)}>취소</button><button className={`button ${confirm.kind === 'detach' ? 'button-primary' : 'button-danger'}`} onClick={confirm.action}>{confirm.label ?? '삭제'}</button></div>
+    </Modal>}
     {helpOpen && <Modal onClose={() => setHelpOpen(false)} title="folio 사용 가이드" wide><p className="eyebrow">A LITTLE GUIDE</p><h2>한 문장에서, 나만의 면접 지도로.</h2><p className="modal-description">면접관의 시선으로 질문하고, 나의 언어로 답해 보세요.</p><div className="guide-steps">{[{ icon: <FolderOpen size={21} />, title: '01. 지원서를 만들고 분야를 골라요', body: '기존 질문은 1차(직무)에 있어요. 면접 차수 탭에서 2차(임원)로 전환하거나 원하는 질문만 선택해 복사할 수 있어요. 지원 기업과 직무를 등록하고 필수질문·상황·가치관·전공·직무·자소서기반 중 준비할 분야를 선택하세요. 필수질문·상황·가치관·전공·직무는 이력서 없이 바로 작성할 수 있어요.' }, { icon: <BookOpen size={21} />, title: '02. 이력서의 문구에서 질문을 시작해요', body: '자소서기반 질문은 PDF를 올리고 단어나 문장을 선택해 연결할 수 있어요. 스캔된 PDF도 한국어·영어 OCR로 읽습니다. 예상 질문과 답변은 직접 작성해요.' }, { icon: <GitBranch size={21} />, title: '03. 답변에서 다음 질문으로 이어가요', body: '질문 편집 화면에서 답변 일부를 선택하면 꼬리질문을 만들 수 있어요. 여러 갈래로, 원하는 만큼 확장하세요.' }, { icon: <CheckCircle2 size={21} />, title: '04. 다듬고, 완료하고, 백업해요', body: '질문과 답변을 다듬고 준비 상태를 표시하세요. PDF 인쇄로 A4 답변 스크립트나 강조 키워드 노트를 만들 수 있어요. 브라우저 데이터 삭제에 대비해 백업 파일도 보관해 주세요.' }].map((step) => <div className="guide-step" key={step.title}><span>{step.icon}</span><div><h3>{step.title}</h3><p>{step.body}</p></div></div>)}</div><button className="button button-primary form-submit" onClick={() => setHelpOpen(false)}>준비 시작하기<ArrowRight size={16} /></button></Modal>}
     {privacyOpen && <Modal onClose={() => setPrivacyOpen(false)} title="저장 공간 안내"><div className="modal-symbol"><LockKeyhole size={24} /></div><h2>{isCloud ? '내 계정으로, 어디서든.' : '내 이야기는, 내 브라우저에.'}</h2><p className="modal-description">{isCloud ? '이력서 PDF와 질문 트리는 로그인한 계정의 Supabase 저장소에 보관됩니다. 같은 계정으로 로그인하면 다른 기기에서 이어서 준비할 수 있습니다. PDF 처리와 OCR은 브라우저에서 실행됩니다.' : '이력서 PDF, 인식한 텍스트, 질문과 답변은 현재 기기의 브라우저 저장소에 보관됩니다. PDF 처리와 OCR도 브라우저에서 실행됩니다.'}</p><div className="privacy-note"><strong>백업을 함께 보관해 주세요.</strong><p>{isCloud ? '다른 기기에서 작성한 최신 내용은 ‘최신 내용 불러오기’ 버튼으로 확인하세요. 같은 지원서를 동시에 수정하면 덮어쓰기를 막고 안내합니다.' : '다른 기기와 자동 동기화되지 않으며, 브라우저 데이터를 삭제하면 준비 내용도 삭제됩니다.'} ‘백업 내보내기’로 질문 트리와 이력서 텍스트를 보관할 수 있어요. PDF 원본은 별도로 보관해 주세요.</p></div><button className="button button-primary form-submit" onClick={() => setPrivacyOpen(false)}>확인했어요<Check size={16} /></button></Modal>}
     {toast && <div className="toast" role="status"><CheckCircle2 size={18} /><span>{toast}</span><button onClick={() => setToast('')} aria-label="알림 닫기"><X size={15} /></button></div>}

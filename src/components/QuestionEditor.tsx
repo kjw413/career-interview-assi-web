@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowUp, Check, CheckCheck, ChevronRight, CornerDownRight, GitBranch, Link2, MessageSquareText, Quote, Trash2, X } from 'lucide-react';
+import { ArrowUp, Check, CheckCheck, ChevronRight, CornerDownRight, GitBranch, Link2, MessageSquareText, Quote, Trash2, Unlink2, X } from 'lucide-react';
 import type { AnswerStylePreset, InterviewNode, QuestionCategory, TextFormatting } from '../types';
 import { QUESTION_CATEGORIES } from '../lib/questionCategories';
 import RichTextField from './RichTextField';
@@ -21,10 +21,11 @@ interface QuestionEditorProps {
   onChange: (patch: Partial<InterviewNode>) => void;
   onClose: () => void;
   onAddChild: (anchor: string) => void;
+  onDetach: () => void;
   onDelete: () => void;
 }
 
-export default function QuestionEditor({ node, parent, questionLabel, parentLabel, childQuestions, category, categoryById, onCategoryChange, stylePresets, onStylePresetsChange, onNavigate, onChange, onClose, onAddChild, onDelete, variant = 'panel' }: QuestionEditorProps) {
+export default function QuestionEditor({ node, parent, questionLabel, parentLabel, childQuestions, category, categoryById, onCategoryChange, stylePresets, onStylePresetsChange, onNavigate, onChange, onClose, onAddChild, onDetach, onDelete, variant = 'panel' }: QuestionEditorProps) {
   const [selection, setSelection] = useState('');
   const canComplete = Boolean(node.question.trim() && node.answer.trim());
   const answerLength = Array.from(node.answer).length;
@@ -52,7 +53,10 @@ export default function QuestionEditor({ node, parent, questionLabel, parentLabe
       </header>
 
       {(parent || childQuestions.length > 0) && <nav className="editor-question-nav" aria-label="연결된 질문">
-        <h3>연결된 질문</h3>
+        <div className="editor-question-nav-heading">
+          <h3>연결된 질문</h3>
+          {parent && <button type="button" className="editor-detach" onClick={onDetach}><Unlink2 size={15} aria-hidden="true" />부모 질문과 분리</button>}
+        </div>
         <div className="editor-question-nav-links">
           {parent && <button type="button" className="editor-question-nav-button" aria-label={`부모 질문${parentLabel ? ` ${parentLabel}` : ''}: ${parent.question || '아직 작성하지 않은 질문'}`} title={parent.question || '아직 작성하지 않은 질문'} onClick={() => onNavigate(parent.id)}>
             <ArrowUp size={17} />
